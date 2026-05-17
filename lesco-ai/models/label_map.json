@@ -1,0 +1,20 @@
+{
+  "label_to_index": {
+    "agua": 0,
+    "ayuda": 1,
+    "bano": 2,
+    "comer": 3,
+    "gracias": 4,
+    "hola": 5
+  },
+  "index_to_label": {
+    "0": "agua",
+    "1": "ayuda",
+    "2": "bano",
+    "3": "comer",
+    "4": "gracias",
+    "5": "hola"
+  },
+  "sequence_length": 30,
+  "feature_size": 63
+}
