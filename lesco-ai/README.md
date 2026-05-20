@@ -61,3 +61,5 @@ deactivated
 python src/train_model.py
 
 python src/predict_live.py
+
+python src/record_sign.py --label gracias
