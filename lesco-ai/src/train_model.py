@@ -9,6 +9,8 @@ import numpy as np
 from sklearn.model_selection import train_test_split
 from tensorflow import keras
 from tensorflow.keras import layers
+from tensorflow.keras.callbacks import EarlyStopping
+
 
 from dataset_utils import FEATURE_SIZE, SEQUENCE_LENGTH, load_dataset
 
@@ -106,6 +108,13 @@ def main() -> None:
     model.summary()
 
     print("[INFO] Iniciando entrenamiento...")
+
+    early_stop = EarlyStopping(
+    monitor="val_loss",
+    patience=5,
+    restore_best_weights=True
+    )  
+
     model.fit(
         X_train,
         y_train,
@@ -113,6 +122,7 @@ def main() -> None:
         epochs=args.epochs,
         batch_size=args.batch_size,
         verbose=1,
+        callbacks=[early_stop],
     )
 
     loss, accuracy = model.evaluate(X_test, y_test, verbose=0)
