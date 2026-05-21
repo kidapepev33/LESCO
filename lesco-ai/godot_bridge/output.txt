@@ -1,0 +1,3 @@
+Predicción: hola
+Confianza: 0.98
+Secuencia: 21/30

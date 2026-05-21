@@ -87,6 +87,11 @@ def draw_overlay(
 def main() -> None:
     """Loop principal para inferencia en vivo con cámara."""
     project_root = Path(__file__).resolve().parent.parent
+    godot_bridge_dir = project_root / "godot_bridge"
+    godot_bridge_dir.mkdir(exist_ok=True)
+
+    output_text_path = godot_bridge_dir / "output.txt"
+    output_frame_path = godot_bridge_dir / "frame.jpg"
     model_path = project_root / "models" / "lesco_lstm.keras"
     label_map_path = project_root / "models" / "label_map.json"
 
@@ -155,16 +160,29 @@ def main() -> None:
                 if best_conf > CONFIDENCE_THRESHOLD:
                     prediction_text = index_to_label.get(best_idx, f"Clase {best_idx}")
                     confidence_text = f"{best_conf:.2f}"
+
+                    sequence_buffer.clear()
+
                 else:
                     prediction_text = "Sin prediccion"
                     confidence_text = f"{best_conf:.2f}"
 
-            frame = draw_overlay(
-                frame,
-                prediction_text=prediction_text,
-                confidence_text=confidence_text,
-                sequence_size=len(sequence_buffer),
+            #frame = draw_overlay(
+            #    frame,
+            #    prediction_text=prediction_text,
+            #   confidence_text=confidence_text,
+            #    sequence_size=len(sequence_buffer),
+            #)
+
+            output_text_path.write_text(
+                f"Predicción: {prediction_text}\n"
+                f"Confianza: {confidence_text}\n"
+                f"Secuencia: {len(sequence_buffer)}/{SEQUENCE_LENGTH}",
+                encoding="utf-8"
             )
+
+            cv2.imwrite(str(output_frame_path), frame)
+
             cv2.imshow("LESCO-AI | Predict Live", frame)
 
             if cv2.waitKey(1) & 0xFF == ord("q"):

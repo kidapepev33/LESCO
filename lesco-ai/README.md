@@ -53,13 +53,23 @@ lesco-ai/
 └── README.md
 ```
 
+python3 -m venv .venv
 
 source .venv/bin/activate
 deactivated
-
 
 python src/train_model.py
 
 python src/predict_live.py
 
 python src/record_sign.py --label gracias
+
+
+## PLEASE WORK
+
+python3 --version
+pip3 --version
+
+cd lesco-ai
+source .venv/bin/activate
+python3 src/predict_live.py
