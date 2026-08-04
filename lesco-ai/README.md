@@ -1,6 +1,7 @@
 # LESCO-AI
 
-Base inicial de un proyecto modular en Python para traducir LESCO usando visión artificial.
+Proyecto Python para reconocer señas LESCO usando visión artificial, landmarks de
+MediaPipe y un modelo temporal entrenado con features relativos a la mano.
 
 ## 1) Crear entorno virtual
 
@@ -35,6 +36,20 @@ Para salir, presiona la tecla `q`.
 - Asegúrate de tener permisos para acceder al dispositivo de video en Linux.
 - Si usas webcam USB, prueba desconectar y reconectar.
 
+## Pipeline actual
+
+El reconocimiento no usa directamente las coordenadas absolutas de MediaPipe.
+Cada secuencia se convierte con un extractor compartido en:
+
+- coordenadas relativas a la muñeca;
+- escala normalizada por tamaño de palma;
+- distancias de huesos de la mano;
+- velocidad y aceleración temporal de los landmarks normalizados;
+- trayectoria de la muñeca relativa al inicio de la seña.
+
+El entrenamiento y la predicción usan el mismo módulo:
+`src/feature_extraction.py`.
+
 ## Estructura del proyecto
 
 ```text
@@ -42,7 +57,12 @@ lesco-ai/
 ├── src/
 │   ├── __init__.py
 │   ├── camera_test.py
+│   ├── dataset_utils.py
+│   ├── feature_extraction.py
 │   ├── hand_tracker.py
+│   ├── predict_live.py
+│   ├── record_sign.py
+│   ├── train_model.py
 │   └── config.py
 ├── dataset/
 ├── raw_data/
@@ -53,23 +73,16 @@ lesco-ai/
 └── README.md
 ```
 
-python3 -m venv .venv
+## Entrenar y predecir
 
-source .venv/bin/activate
-deactivated
-
+```bash
 python src/train_model.py
-
 python src/predict_live.py
-
 python src/record_sign.py --label gracias
+```
 
+## Pruebas
 
-## PLEASE WORK
-
-python3 --version
-pip3 --version
-
-cd lesco-ai
-source .venv/bin/activate
-python3 src/predict_live.py
+```bash
+python -m unittest discover -s tests
+```

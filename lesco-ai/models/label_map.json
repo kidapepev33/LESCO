@@ -32,5 +32,6 @@
     "13": "yo"
   },
   "sequence_length": 30,
-  "feature_size": 63
+  "feature_size": 218,
+  "feature_pipeline": "relative_hand_shape_with_start_relative_wrist_trajectory_v2"
 }

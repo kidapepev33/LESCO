@@ -1,17 +1,20 @@
-"""Utilidades para cargar y normalizar dataset de señas LESCO."""
+"""Utilidades para cargar dataset de señas LESCO."""
 
 from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Tuple
 
 import numpy as np
 
-SEQUENCE_LENGTH = 30
-LANDMARKS_PER_FRAME = 21
-COORDS_PER_LANDMARK = 3
-FEATURE_SIZE = LANDMARKS_PER_FRAME * COORDS_PER_LANDMARK
+from feature_extraction import (
+    FEATURE_PIPELINE_NAME,
+    FEATURE_SIZE,
+    SEQUENCE_LENGTH,
+    extract_landmark_features,
+    temporal_resample,
+)
 
 
 def get_project_root() -> Path:
@@ -34,44 +37,9 @@ def list_label_dirs(dataset_dir: Path) -> List[Path]:
     return sorted([p for p in dataset_dir.iterdir() if p.is_dir()])
 
 
-def temporal_resample(sequence: np.ndarray, target_len: int = SEQUENCE_LENGTH) -> np.ndarray:
-    """Re-muestrea una secuencia temporal a `target_len` usando interpolación lineal.
-
-    Entrada esperada: (frames, 21, 3)
-    Salida: (target_len, 21, 3)
-    """
-    if sequence.ndim != 3 or sequence.shape[1:] != (LANDMARKS_PER_FRAME, COORDS_PER_LANDMARK):
-        raise ValueError(
-            "Shape de secuencia inválido. "
-            f"Esperado: (frames, {LANDMARKS_PER_FRAME}, {COORDS_PER_LANDMARK}), "
-            f"obtenido: {sequence.shape}"
-        )
-
-    frames = sequence.shape[0]
-    if frames < 1:
-        raise ValueError("La secuencia no tiene frames para re-muestrear.")
-
-    if frames == target_len:
-        return sequence.astype(np.float32)
-
-    sequence_flat = sequence.reshape(frames, FEATURE_SIZE).astype(np.float32)
-
-    old_t = np.linspace(0.0, 1.0, num=frames, dtype=np.float32)
-    new_t = np.linspace(0.0, 1.0, num=target_len, dtype=np.float32)
-
-    # Interpolamos cada feature temporalmente para mantener una transición suave.
-    resampled_flat = np.stack(
-        [np.interp(new_t, old_t, sequence_flat[:, i]) for i in range(FEATURE_SIZE)],
-        axis=1,
-    ).astype(np.float32)
-
-    return resampled_flat.reshape(target_len, LANDMARKS_PER_FRAME, COORDS_PER_LANDMARK)
-
-
-def normalize_sample(sequence: np.ndarray, target_len: int = SEQUENCE_LENGTH) -> np.ndarray:
-    """Normaliza un sample a shape final (target_len, 63)."""
-    resampled = temporal_resample(sequence, target_len=target_len)
-    return resampled.reshape(target_len, FEATURE_SIZE).astype(np.float32)
+def prepare_sample(sequence: np.ndarray, target_len: int = SEQUENCE_LENGTH) -> np.ndarray:
+    """Convierte landmarks crudos en features finales del modelo."""
+    return extract_landmark_features(sequence, target_len=target_len)
 
 
 def save_label_map(label_to_index: Dict[str, int], models_dir: Path | None = None) -> Path:
@@ -88,6 +56,7 @@ def save_label_map(label_to_index: Dict[str, int], models_dir: Path | None = Non
         "index_to_label": index_to_label,
         "sequence_length": SEQUENCE_LENGTH,
         "feature_size": FEATURE_SIZE,
+        "feature_pipeline": FEATURE_PIPELINE_NAME,
     }
 
     with label_map_path.open("w", encoding="utf-8") as f:
@@ -103,7 +72,7 @@ def load_dataset(
 ) -> Tuple[np.ndarray, np.ndarray, Dict[str, int]]:
     """Carga samples .npy, normaliza y retorna X, y, label_map.
 
-    X: (n_samples, target_len, 63)
+    X: (n_samples, target_len, FEATURE_SIZE)
     y: (n_samples,)
     label_map: {label: class_index}
     """
@@ -142,8 +111,8 @@ def load_dataset(
         for sample_file in sample_files:
             try:
                 sequence = np.load(sample_file)
-                normalized = normalize_sample(sequence, target_len=target_len)
-                samples_x.append(normalized)
+                features = prepare_sample(sequence, target_len=target_len)
+                samples_x.append(features)
                 samples_y.append(class_index)
             except Exception as exc:
                 skipped += 1

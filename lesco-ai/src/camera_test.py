@@ -37,10 +37,10 @@ def main() -> None:
     try:
         while True:
             success, frame = cap.read()
-            frame = cv2.flip(frame, 1)
             if not success:
                 print("[WARNING] No se pudo leer un frame de la cámara.")
                 break
+            frame = cv2.flip(frame, 1)
 
             results = tracker.process_frame(frame)
             frame = tracker.draw_landmarks(frame, results)

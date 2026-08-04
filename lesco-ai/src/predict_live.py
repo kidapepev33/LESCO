@@ -1,4 +1,4 @@
-"""Predicción en vivo de señas LESCO con modelo LSTM entrenado."""
+"""Predicción en vivo de señas LESCO con el pipeline robusto de landmarks."""
 
 from __future__ import annotations
 
@@ -18,10 +18,11 @@ from config import (
     MIN_DETECTION_CONFIDENCE,
     MIN_TRACKING_CONFIDENCE,
 )
-from dataset_utils import SEQUENCE_LENGTH, normalize_sample
+from dataset_utils import FEATURE_SIZE, SEQUENCE_LENGTH, prepare_sample
 from hand_tracker import HandTracker
 
 CONFIDENCE_THRESHOLD = 0.70
+MODEL_FILENAME = "lesco_landmark_lstm.keras"
 
 
 def load_label_map(label_map_path: Path) -> dict[int, str]:
@@ -36,6 +37,17 @@ def load_label_map(label_map_path: Path) -> dict[int, str]:
         return {idx: label for label, idx in data["label_to_index"].items()}
 
     raise ValueError("Formato de label_map inválido. Falta index_to_label o label_to_index.")
+
+
+def validate_model_shape(model: keras.Model) -> None:
+    """Evita ejecutar modelos antiguos con un pipeline de features distinto."""
+    input_shape = model.input_shape
+    if len(input_shape) != 3 or input_shape[1:] != (SEQUENCE_LENGTH, FEATURE_SIZE):
+        raise ValueError(
+            "El modelo no coincide con el pipeline actual. "
+            f"Esperado: (None, {SEQUENCE_LENGTH}, {FEATURE_SIZE}), obtenido: {input_shape}. "
+            "Vuelve a entrenar con: python src/train_model.py"
+        )
 
 
 def draw_overlay(
@@ -92,7 +104,7 @@ def main() -> None:
 
     output_text_path = godot_bridge_dir / "output.txt"
     output_frame_path = godot_bridge_dir / "frame.jpg"
-    model_path = project_root / "models" / "lesco_lstm.keras"
+    model_path = project_root / "models" / MODEL_FILENAME
     label_map_path = project_root / "models" / "label_map.json"
 
     if not model_path.exists():
@@ -107,6 +119,7 @@ def main() -> None:
 
     print("[INFO] Cargando modelo...")
     model = keras.models.load_model(model_path)
+    validate_model_shape(model)
     index_to_label = load_label_map(label_map_path)
 
     tracker = HandTracker(
@@ -150,8 +163,8 @@ def main() -> None:
 
             if len(sequence_buffer) == SEQUENCE_LENGTH:
                 raw_sequence = np.array(sequence_buffer, dtype=np.float32)  # (30, 21, 3)
-                model_input = normalize_sample(raw_sequence, target_len=SEQUENCE_LENGTH)
-                model_input = np.expand_dims(model_input, axis=0)  # (1, 30, 63)
+                model_input = prepare_sample(raw_sequence, target_len=SEQUENCE_LENGTH)
+                model_input = np.expand_dims(model_input, axis=0)
 
                 probs = model.predict(model_input, verbose=0)[0]
                 best_idx = int(np.argmax(probs))
@@ -167,12 +180,12 @@ def main() -> None:
                     prediction_text = "Sin prediccion"
                     confidence_text = f"{best_conf:.2f}"
 
-            #frame = draw_overlay(
-            #    frame,
-            #    prediction_text=prediction_text,
-            #   confidence_text=confidence_text,
-            #    sequence_size=len(sequence_buffer),
-            #)
+            frame = draw_overlay(
+                frame,
+                prediction_text=prediction_text,
+                confidence_text=confidence_text,
+                sequence_size=len(sequence_buffer),
+            )
 
             output_text_path.write_text(
                 f"Predicción: {prediction_text}\n"

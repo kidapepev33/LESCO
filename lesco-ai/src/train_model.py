@@ -1,4 +1,4 @@
-"""Entrenamiento básico LSTM para clasificación de señas LESCO."""
+"""Entrenamiento LSTM para clasificación robusta de señas LESCO."""
 
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ MIN_SAMPLES_REQUIRED = 10
 
 def parse_args() -> argparse.Namespace:
     """Parsea argumentos de entrenamiento."""
-    parser = argparse.ArgumentParser(description="Entrena un modelo LSTM básico para LESCO.")
+    parser = argparse.ArgumentParser(description="Entrena un modelo LSTM robusto para LESCO.")
     parser.add_argument("--epochs", type=int, default=30, help="Cantidad de epochs (default: 30)")
     parser.add_argument("--batch-size", type=int, default=16, help="Batch size (default: 16)")
     parser.add_argument("--test-size", type=float, default=0.2, help="Proporción test (default: 0.2)")
@@ -28,13 +28,14 @@ def parse_args() -> argparse.Namespace:
 
 
 def build_model(num_classes: int) -> keras.Model:
-    """Construye el modelo LSTM solicitado."""
+    """Construye el modelo LSTM sobre features relativos e invariantes."""
     model = keras.Sequential(
         [
             layers.Input(shape=(SEQUENCE_LENGTH, FEATURE_SIZE)),
+            layers.LayerNormalization(),
             layers.LSTM(64),
-            layers.Dense(64, activation="relu"),
-            layers.Dropout(0.3),
+            layers.Dense(48, activation="relu"),
+            layers.Dropout(0.30),
             layers.Dense(num_classes, activation="softmax"),
         ]
     )
@@ -110,10 +111,10 @@ def main() -> None:
     print("[INFO] Iniciando entrenamiento...")
 
     early_stop = EarlyStopping(
-    monitor="val_loss",
-    patience=5,
-    restore_best_weights=True
-    )  
+        monitor="val_loss",
+        patience=5,
+        restore_best_weights=True,
+    )
 
     model.fit(
         X_train,
@@ -131,7 +132,7 @@ def main() -> None:
 
     model_dir = Path(__file__).resolve().parent.parent / "models"
     model_dir.mkdir(parents=True, exist_ok=True)
-    model_path = model_dir / "lesco_lstm.keras"
+    model_path = model_dir / "lesco_landmark_lstm.keras"
 
     model.save(model_path)
     print(f"[OK] Modelo guardado en: {model_path}")
@@ -142,3 +143,4 @@ if __name__ == "__main__":
         main()
     except Exception as exc:
         print(f"[ERROR] {exc}")
+        raise
