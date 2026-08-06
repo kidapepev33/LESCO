@@ -10,7 +10,7 @@ import numpy as np
 from tensorflow import keras
 
 from dataset_utils import get_default_dataset_dir
-from feature_extraction import FEATURE_SIZE, SEQUENCE_LENGTH, extract_landmark_features, validate_raw_sequence
+from feature_extraction import SEQUENCE_LENGTH, extract_landmark_features, static_landmark_signature, validate_raw_sequence
 from model_utils import load_label_map, load_sign_model
 
 EPSILON = 1e-8
@@ -19,6 +19,7 @@ SAME_WORD_OVERLAP_RATIO_THRESHOLD = 0.50
 SAME_WORD_CENTER_DISTANCE_FACTOR = 0.75
 SAME_WORD_MAX_CHAIN_SPAN_FACTOR = 1.90
 SAME_WORD_CHAIN_START_FACTOR = 0.85
+StaticSegment = tuple[int, int, dict[str, object]]
 
 
 @dataclass(frozen=True)
@@ -30,6 +31,7 @@ class WindowPrediction:
     start_frame: int
     end_frame: int
     feature: np.ndarray
+    static_signature: dict[str, object] | None = None
 
 
 @dataclass(frozen=True)
@@ -43,6 +45,11 @@ class SignDetection:
     support: int
     feature: np.ndarray
     prototype_score: float | None = None
+    static_signature: dict[str, object] | None = None
+    static_score: float | None = None
+    static_dominant_landmark: int | None = None
+    static_dominance: float | None = None
+    static_accepted: bool | None = None
 
 
 @dataclass(frozen=True)
@@ -134,6 +141,25 @@ def extract_window_features(
     return np.asarray(features, dtype=np.float32)
 
 
+def static_signature_for_range(
+    start_frame: int,
+    end_frame: int,
+    static_segments: Sequence[StaticSegment] | None,
+) -> dict[str, object] | None:
+    """Return the static signature with strongest overlap for one temporal range."""
+    if not static_segments:
+        return None
+
+    best_signature = None
+    best_overlap = 0.0
+    for segment_start, segment_end, signature in static_segments:
+        overlap = frame_overlap_ratio(start_frame, end_frame, segment_start, segment_end)
+        if overlap > best_overlap:
+            best_overlap = overlap
+            best_signature = signature
+    return best_signature if best_overlap > 0.0 else None
+
+
 def predict_windows(
     sequence: np.ndarray,
     model: keras.Model,
@@ -142,6 +168,7 @@ def predict_windows(
     stride: int = 5,
     min_confidence: float = 0.55,
     top_k: int = 2,
+    static_segments: Sequence[StaticSegment] | None = None,
 ) -> list[WindowPrediction]:
     """Predict candidate signs on overlapping windows."""
     ranges = sliding_window_ranges(len(sequence), window_size=window_size, stride=stride)
@@ -150,6 +177,7 @@ def predict_windows(
 
     predictions: list[WindowPrediction] = []
     for (start, end), feature, probs in zip(ranges, features, probs_batch):
+        static_signature = static_signature_for_range(start, end, static_segments)
         top_indices = np.argsort(probs)[::-1][:top_k]
         for idx in top_indices:
             confidence = float(probs[idx])
@@ -162,6 +190,7 @@ def predict_windows(
                     start_frame=start,
                     end_frame=end,
                     feature=feature,
+                    static_signature=static_signature,
                 )
             )
     return predictions
@@ -225,6 +254,7 @@ def _merge_group(word: str, group: Sequence[WindowPrediction]) -> SignDetection:
     weights = np.asarray([p.confidence for p in group], dtype=np.float32)
     weights = weights / max(float(np.sum(weights)), EPSILON)
     feature = np.sum(np.stack([p.feature for p in group]) * weights[:, None, None], axis=0).astype(np.float32)
+    static_signature = max(group, key=lambda p: p.confidence).static_signature
     return SignDetection(
         word=word,
         confidence=max(p.confidence for p in group),
@@ -232,15 +262,27 @@ def _merge_group(word: str, group: Sequence[WindowPrediction]) -> SignDetection:
         end_frame=max(p.end_frame for p in group),
         support=len(group),
         feature=feature,
+        static_signature=static_signature,
+        static_dominant_landmark=None if static_signature is None else int(static_signature["dominant_landmark"]),
+        static_dominance=None if static_signature is None else float(static_signature["dominance"]),
+        static_accepted=None if static_signature is None else bool(static_signature["accepted"]),
     )
 
 
 class PrototypeLibrary:
     """Class prototypes used for final visual validation."""
 
-    def __init__(self, prototypes: dict[str, np.ndarray], radii: dict[str, float]) -> None:
+    def __init__(
+        self,
+        prototypes: dict[str, np.ndarray],
+        radii: dict[str, float],
+        static_prototypes: dict[str, np.ndarray] | None = None,
+        static_radii: dict[str, float] | None = None,
+    ) -> None:
         self.prototypes = prototypes
         self.radii = radii
+        self.static_prototypes = static_prototypes if static_prototypes is not None else {}
+        self.static_radii = static_radii if static_radii is not None else {}
 
     @classmethod
     def from_dataset(cls, dataset_dir: Path | None = None) -> "PrototypeLibrary":
@@ -249,13 +291,21 @@ class PrototypeLibrary:
 
         prototypes: dict[str, np.ndarray] = {}
         radii: dict[str, float] = {}
+        static_prototypes: dict[str, np.ndarray] = {}
+        static_radii: dict[str, float] = {}
         for label_dir in sorted(Path(dataset_dir).iterdir()):
             if not label_dir.is_dir():
                 continue
 
             features = []
+            static_features = []
             for sample_file in sorted(label_dir.glob("sample_*.npy")):
-                features.append(extract_landmark_features(np.load(sample_file)))
+                sample = np.load(sample_file)
+                features.append(extract_landmark_features(sample))
+                static_window = sample[-min(5, len(sample)) :]
+                signature = static_landmark_signature(static_window)
+                if bool(signature["accepted"]):
+                    static_features.append(np.asarray(signature["vector"], dtype=np.float32))
             if not features:
                 continue
 
@@ -265,7 +315,19 @@ class PrototypeLibrary:
             prototypes[label_dir.name] = prototype
             radii[label_dir.name] = max(float(np.percentile(distances, 75)), EPSILON)
 
-        return cls(prototypes=prototypes, radii=radii)
+            if static_features:
+                static_stacked = np.asarray(static_features, dtype=np.float32)
+                static_prototype = np.mean(static_stacked, axis=0).astype(np.float32)
+                static_distances = np.linalg.norm(static_stacked - static_prototype, axis=1)
+                static_prototypes[label_dir.name] = static_prototype
+                static_radii[label_dir.name] = max(float(np.percentile(static_distances, 75)), EPSILON)
+
+        return cls(
+            prototypes=prototypes,
+            radii=radii,
+            static_prototypes=static_prototypes,
+            static_radii=static_radii,
+        )
 
     def score(self, word: str, feature: np.ndarray) -> float:
         """Return a bounded visual compatibility score in ``(0, 1]``."""
@@ -276,6 +338,18 @@ class PrototypeLibrary:
         distance = float(np.linalg.norm((feature - prototype).reshape(-1)))
         return float(np.exp(-distance / (radius + EPSILON)))
 
+    def static_score(self, word: str, signature: dict[str, object] | None) -> float | None:
+        """Return static landmark compatibility, or ``None`` when unavailable."""
+        if signature is None or not bool(signature.get("accepted", False)):
+            return None
+        prototype = self.static_prototypes.get(word)
+        if prototype is None:
+            return None
+        radius = self.static_radii[word]
+        vector = np.asarray(signature["vector"], dtype=np.float32)
+        distance = float(np.linalg.norm(vector - prototype))
+        return float(np.exp(-distance / (radius + EPSILON)))
+
 
 class SentenceBuilder:
     """Small local beam-search sentence builder."""
@@ -284,7 +358,7 @@ class SentenceBuilder:
         self,
         beam_width: int = 5,
         visual_weight: float = 4.0,
-        language_weight: float = 0.6,
+        language_weight: float = 1.0,
         skip_penalty: float = 0.25,
     ) -> None:
         self.beam_width = beam_width
@@ -301,11 +375,15 @@ class SentenceBuilder:
         if not detections:
             return SentenceResult("", (), (), (), 0.0, 0.0, 0.0)
 
-        scored = [
-            replace(det, prototype_score=prototypes.score(det.word, det.feature) if prototypes else None)
+        all_scored = [
+            replace(
+                det,
+                prototype_score=prototypes.score(det.word, det.feature) if prototypes else None,
+                static_score=prototypes.static_score(det.word, det.static_signature) if prototypes else None,
+            )
             for det in detections
         ]
-        scored = suppress_competing_detections(scored)
+        scored = suppress_competing_detections(all_scored)
 
         beams: list[tuple[float, float, float, list[SignDetection]]] = [(0.0, 0.0, 0.0, [])]
         for det in scored:
@@ -344,6 +422,8 @@ class SentenceBuilder:
 
         best_total, best_visual, best_language, best_detections = max(beams, key=lambda item: item[0])
         best_detections = self._remove_transition_repeats(best_detections)
+        best_detections = self._resolve_consecutive_duplicates(best_detections, all_scored)
+        best_detections = self._prefer_common_phrase_order(best_detections)
         words = tuple(det.word for det in best_detections)
         return SentenceResult(
             sentence=" ".join(words).upper(),
@@ -360,8 +440,10 @@ class SentenceBuilder:
         prototype_score = 0.0
         if detection.prototype_score is not None:
             prototype_score = detection.prototype_score
-        support_bonus = min(detection.support, 4) * 0.05
-        return float(confidence_score + 0.35 * prototype_score + support_bonus)
+        movement_score = confidence_score + 0.35 * prototype_score + min(detection.support, 4) * 0.05
+        if detection.static_score is None:
+            return float(movement_score)
+        return float(0.8 * movement_score + 0.2 * detection.static_score)
 
     def _transition_score(self, previous: str | None, current: str) -> float:
         if previous is None:
@@ -369,6 +451,8 @@ class SentenceBuilder:
         if previous == current:
             return -0.35
         common_pairs = {
+            ("yo", "tener"): 0.45,
+            ("tener", "bano"): 0.35,
             ("yo", "querer"): 0.35,
             ("querer", "agua"): 0.35,
             ("hola", "usted"): 0.20,
@@ -404,11 +488,82 @@ class SentenceBuilder:
             cleaned.append(det)
         return cleaned
 
+    def _resolve_consecutive_duplicates(
+        self,
+        detections: Sequence[SignDetection],
+        candidates: Sequence[SignDetection],
+    ) -> list[SignDetection]:
+        """Replace stuck adjacent repeated words with a nearby alternative when available."""
+        cleaned: list[SignDetection] = []
+        for det in detections:
+            if cleaned and cleaned[-1].word == det.word:
+                previous = cleaned[-1]
+                gap = det.start_frame - previous.end_frame
+                if 0 <= gap <= max(4, SEQUENCE_LENGTH // 3):
+                    alternative = self._best_duplicate_alternative(previous, det, candidates)
+                    if alternative is not None:
+                        cleaned.append(alternative)
+                    elif (det.confidence, det.support) > (previous.confidence, previous.support):
+                        cleaned[-1] = det
+                    continue
+            cleaned.append(det)
+        return cleaned
+
+    def _best_duplicate_alternative(
+        self,
+        previous: SignDetection,
+        duplicate: SignDetection,
+        candidates: Sequence[SignDetection],
+    ) -> SignDetection | None:
+        alternatives = [
+            candidate
+            for candidate in candidates
+            if candidate.word != duplicate.word
+            and candidate.word != previous.word
+            and frame_overlap_ratio(
+                duplicate.start_frame,
+                duplicate.end_frame,
+                candidate.start_frame,
+                candidate.end_frame,
+            )
+            >= 0.50
+        ]
+        if not alternatives:
+            return None
+        return max(alternatives, key=detection_score)
+
+    def _prefer_common_phrase_order(self, detections: Sequence[SignDetection]) -> list[SignDetection]:
+        """Prefer the common YO TENER order when both detections are adjacent."""
+        ordered = list(detections)
+        index = 0
+        while index < len(ordered) - 1:
+            current = ordered[index]
+            following = ordered[index + 1]
+            if (
+                current.word == "tener"
+                and following.word == "yo"
+                and frame_overlap_ratio(
+                    current.start_frame,
+                    current.end_frame,
+                    following.start_frame,
+                    following.end_frame,
+                )
+                >= 0.40
+            ):
+                ordered[index], ordered[index + 1] = following, current
+                index += 2
+                continue
+            index += 1
+        return ordered
+
 
 def detection_score(detection: SignDetection) -> float:
     """Score used to compare candidates that explain the same frames."""
     prototype_score = detection.prototype_score if detection.prototype_score is not None else 0.0
-    return detection.confidence + 0.45 * prototype_score + min(detection.support, 4) * 0.03
+    movement_score = detection.confidence + 0.45 * prototype_score + min(detection.support, 4) * 0.03
+    if detection.static_score is None:
+        return movement_score
+    return 0.8 * movement_score + 0.2 * detection.static_score
 
 
 def suppress_competing_detections(
@@ -453,6 +608,7 @@ class ContinuousRecognizer:
         stride: int = 5,
         min_confidence: float = 0.55,
         top_k: int = 2,
+        static_segments: Sequence[StaticSegment] | None = None,
     ) -> SentenceResult:
         raw_predictions = predict_windows(
             sequence,
@@ -462,6 +618,7 @@ class ContinuousRecognizer:
             stride=stride,
             min_confidence=min_confidence,
             top_k=top_k,
+            static_segments=static_segments,
         )
         detections = group_repeated_detections(raw_predictions)
         return self.builder.build(detections, prototypes=self.prototypes)

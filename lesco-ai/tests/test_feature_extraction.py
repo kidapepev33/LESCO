@@ -50,6 +50,14 @@ class FeatureExtractionTests(unittest.TestCase):
         self.assertEqual(features.shape, (SEQUENCE_LENGTH, FEATURE_SIZE))
         self.assertEqual(features.dtype, np.float32)
 
+    def test_two_hand_feature_shape(self) -> None:
+        two_hand = np.zeros((self.sequence.shape[0], 2, 21, 3), dtype=np.float32)
+        two_hand[:, 0] = self.sequence
+        two_hand[:, 1] = self.moving_sequence(axis=1)
+        features = extract_landmark_features(two_hand)
+        self.assertEqual(features.shape, (SEQUENCE_LENGTH, FEATURE_SIZE))
+        self.assertEqual(FEATURE_SIZE, 436)
+
     def test_translation_invariance(self) -> None:
         sequence = self.moving_sequence(axis=0)
         original = extract_landmark_features(sequence)

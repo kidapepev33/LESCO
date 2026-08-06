@@ -1,2 +1,7 @@
-Oración: 
-Estado: Oracion cerrada sin prediccion confiable
+Oración: YO TENER ESCUELA
+Score visual: 3.809
+Score lenguaje: 0.049
+Detecciones:
+YO conf=0.980 frames=0-38 support=3
+TENER conf=0.999 frames=16-58 support=4
+ESCUELA conf=0.998 frames=36-79 support=5

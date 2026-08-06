@@ -47,6 +47,8 @@ def draw_debug_overlay(
     detected_segments: int,
     individual_confidence: float | None,
     concatenated_confidence: float | None,
+    static_signature: dict[str, object] | None,
+    static_score: float | None,
     sentence_status: str,
     config: LiveRecognitionConfig,
     window_count: int = 0,
@@ -54,26 +56,26 @@ def draw_debug_overlay(
     result: SentenceResult | None = None,
 ) -> np.ndarray:
     """Draw technical runtime details for debugging."""
-    individual_text = "-" if individual_confidence is None else f"{individual_confidence:.3f}"
-    concatenated_text = "-" if concatenated_confidence is None else f"{concatenated_confidence:.3f}"
+    if static_signature is None:
+        static_lines = ["Firma estatica: no"]
+    else:
+        static_status = "aceptada" if bool(static_signature["accepted"]) else "ambigua"
+        static_score_text = "-" if static_score is None else f"{static_score:.3f}"
+        static_lines = [
+            "Firma estatica: si",
+            f"Landmark dominante: {int(static_signature['dominant_landmark'])}",
+            f"Dominancia: {float(static_signature['dominance']):.1f}% ({static_status})",
+            f"Score estatico: {static_score_text}",
+        ]
     state_text = f"{state} {pause_counter}/{end_threshold}" if state == "POSSIBLE_PAUSE" else state
     lines = [
         f"Estado: {state_text}",
         f"Pausa: {pause_counter}/{end_threshold}",
         f"Movimiento: {movement:.4f}",
         f"Frames segmento: {recorded_frames}",
+        *static_lines,
         f"Sin manos: {no_hand_frames}/{no_hand_threshold}",
-        f"Ventanas detectadas: {detected_segments}",
-        f"Pendiente baja confianza: {'si' if has_pending_low_confidence else 'no'}",
-        f"Conf individual: {individual_text}",
-        f"Conf concatenada: {concatenated_text}",
-        f"Cierre: {sentence_status or '-'}",
-        f"Ventanas: {window_count} | stride={config.stride}",
-        f"Conf min: {config.min_confidence:.2f}",
-        f"Prototipos: {'si' if config.use_prototypes else 'no'}",
     ]
-    if processing_ms is not None:
-        lines.append(f"Procesamiento: {processing_ms:.1f} ms")
     if result is not None:
         lines.extend(
             [

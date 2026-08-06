@@ -13,7 +13,6 @@ from feature_extraction import (
     FEATURE_SIZE,
     SEQUENCE_LENGTH,
     extract_landmark_features,
-    temporal_resample,
 )
 
 
@@ -33,7 +32,7 @@ def get_default_models_dir() -> Path:
 
 
 def list_label_dirs(dataset_dir: Path) -> List[Path]:
-    """Lista carpetas de labels válidas dentro de `dataset/`."""
+    """Lista carpetas de labels válidas dentro del dataset indicado."""
     return sorted([p for p in dataset_dir.iterdir() if p.is_dir()])
 
 
@@ -119,7 +118,7 @@ def load_dataset(
                 print(f"[WARNING] Se omitió {sample_file.name} ({label}): {exc}")
 
     if not samples_x:
-        raise ValueError("No se cargaron samples válidos. Revisa el contenido de dataset/.")
+        raise ValueError(f"No se cargaron samples válidos. Revisa el contenido de {dataset_dir}.")
 
     X = np.array(samples_x, dtype=np.float32)
     y = np.array(samples_y, dtype=np.int64)
