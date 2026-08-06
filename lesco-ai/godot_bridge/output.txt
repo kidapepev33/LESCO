@@ -1,3 +1,2 @@
-Predicción: casa
-Confianza: 0.71
-Secuencia: 2/30
+Oración: 
+Estado: Oracion cerrada sin prediccion confiable

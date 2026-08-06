@@ -57,10 +57,15 @@ lesco-ai/
 ├── src/
 │   ├── __init__.py
 │   ├── camera_test.py
+│   ├── config_ui.py
+│   ├── continuous_recognition.py
 │   ├── dataset_utils.py
+│   ├── debug_view.py
 │   ├── feature_extraction.py
 │   ├── hand_tracker.py
+│   ├── model_utils.py
 │   ├── predict_live.py
+│   ├── runtime_config.py
 │   ├── record_sign.py
 │   ├── train_model.py
 │   └── config.py
@@ -73,12 +78,48 @@ lesco-ai/
 └── README.md
 ```
 
-## Entrenar y predecir
+## Entrenar y reconocer
 
 ```bash
 python src/train_model.py
 python src/predict_live.py
 python src/record_sign.py --label gracias
+```
+
+## Reconocimiento continuo
+
+Modo normal de presentación:
+
+```bash
+python src/predict_live.py
+```
+
+El sistema espera a que aparezcan manos de forma estable, graba mientras se
+realizan varias señas, finaliza cuando las manos desaparecen durante el tiempo
+configurado, procesa la secuencia y vuelve automáticamente a esperar.
+
+Modo debug:
+
+```bash
+python src/predict_live.py --debug
+```
+
+Configuración local:
+
+```bash
+python src/predict_live.py --config
+```
+
+Procesar un clip de landmarks para pruebas:
+
+```bash
+python src/predict_live.py --input-npy clip.npy
+```
+
+Guardar clips de debug:
+
+```bash
+python src/predict_live.py --debug --save-clip clips/demo.npy
 ```
 
 ## Pruebas
