@@ -17,7 +17,7 @@ class LiveRecognitionConfig:
     no_hands_timeout_seconds: float = 0.9
     movement_threshold: float = 0.12
     pause_frames: int = 3
-    min_clip_seconds: float = 0.6
+    min_clip_seconds: float = 0.1
     max_clip_seconds: float = 12.0
     use_prototypes: bool = True
     show_landmarks: bool = True
