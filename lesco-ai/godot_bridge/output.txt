@@ -1,7 +1,9 @@
-Oración: YO TENER ESCUELA
-Score visual: 3.809
-Score lenguaje: 0.049
+Oración: USTED USTED TENER CASA CASA
+Score visual: 0.976
+Score lenguaje: 0.000
 Detecciones:
-YO conf=0.980 frames=0-38 support=3
-TENER conf=0.999 frames=16-58 support=4
-ESCUELA conf=0.998 frames=36-79 support=5
+USTED conf=0.998 frames=0-4 support=1
+USTED conf=0.990 frames=4-15 support=1
+TENER conf=0.990 frames=15-37 support=1
+CASA conf=0.927 frames=37-48 support=1
+CASA conf=0.976 frames=48-51 support=1

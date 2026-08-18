@@ -16,7 +16,8 @@ sys.path.insert(0, str(PROJECT_ROOT / "src"))
 from feature_extraction import extract_landmark_features, static_landmark_signature, temporal_resample  # noqa: E402
 from hand_tracker import select_continuous_hand, select_two_hand_slots  # noqa: E402
 from model_utils import load_label_map, load_sign_model  # noqa: E402
-from predict_live import CaptureState, LandmarkClipRecorder, SegmentPredictionBuffer  # noqa: E402
+from continuous_recognition import SentenceResult, SignDetection  # noqa: E402
+from predict_live import CaptureState, LandmarkClipRecorder, SegmentPrediction, SegmentPredictionBuffer, write_godot_output  # noqa: E402
 from runtime_config import LiveRecognitionConfig, load_runtime_config, save_runtime_config  # noqa: E402
 
 
@@ -107,7 +108,7 @@ class LiveClipRecorderTests(unittest.TestCase):
         self.assertEqual(len(recorder.possible_pause_frames), 0)
         self.assertEqual(recorder.recorded_frames, 3)
 
-    def test_finishes_after_three_low_activity_frames(self) -> None:
+    def test_confirms_pause_without_finishing_segment(self) -> None:
         recorder = LandmarkClipRecorder(self.make_config(), fps=10)
         recorder.step(moved_hand_frame(0.0))
         recorder.step(moved_hand_frame(0.05))
@@ -116,11 +117,21 @@ class LiveClipRecorderTests(unittest.TestCase):
             step = recorder.step(moved_hand_frame(0.05))
         self.assertIsNotNone(step)
         self.assertEqual(step.state, CaptureState.WAITING)
+        self.assertIsNone(step.finalized_clip)
+        self.assertEqual(recorder.recorded_frames, 4)
+
+    def test_finishes_previous_segment_when_motion_returns_after_confirmed_pause(self) -> None:
+        recorder = LandmarkClipRecorder(self.make_config(), fps=10)
+        recorder.step(moved_hand_frame(0.0))
+        recorder.step(moved_hand_frame(0.05))
+        for _ in range(3):
+            recorder.step(moved_hand_frame(0.05))
+        step = recorder.step(moved_hand_frame(0.12))
+        self.assertEqual(step.state, CaptureState.MOVING)
         self.assertIsNotNone(step.finalized_clip)
         self.assertEqual(step.finalized_clip.shape[0], 4)
-        self.assertIsNotNone(step.finalized_static_signature)
-        self.assertIn("dominant_landmark", step.finalized_static_signature)
-        self.assertIn("dominance", step.finalized_static_signature)
+        self.assertEqual(recorder.recorded_frames, 1)
+        self.assertIsNone(step.finalized_static_signature)
 
     def test_discards_too_short_clip(self) -> None:
         config = self.make_config(min_clip_seconds=1.0)
@@ -131,9 +142,12 @@ class LiveClipRecorderTests(unittest.TestCase):
         for _ in range(3):
             step = recorder.step(moved_hand_frame(0.05))
         self.assertIsNotNone(step)
+        self.assertFalse(step.discarded_too_short)
+        step = recorder.step(moved_hand_frame(0.12))
+        self.assertIsNotNone(step)
         self.assertTrue(step.discarded_too_short)
         self.assertIsNone(step.finalized_clip)
-        self.assertEqual(recorder.state, CaptureState.WAITING)
+        self.assertEqual(recorder.state, CaptureState.MOVING)
 
     def test_finishes_at_max_duration(self) -> None:
         config = self.make_config(max_clip_seconds=1.0)
@@ -169,7 +183,7 @@ class LiveClipRecorderTests(unittest.TestCase):
         for _ in range(3):
             segment_step = recorder.step(moved_hand_frame(0.05))
         self.assertIsNotNone(segment_step)
-        self.assertIsNotNone(segment_step.finalized_clip)
+        self.assertIsNone(segment_step.finalized_clip)
         self.assertIsNone(segment_step.finalized_sentence_clip)
         self.assertEqual(recorder.sentence_recorded_frames, 5)
 
@@ -191,9 +205,107 @@ class LiveClipRecorderTests(unittest.TestCase):
         self.assertEqual(recorder.state, CaptureState.MOVING)
         self.assertEqual(recorder.no_hand_frames, 0)
 
-    def test_segment_buffer_does_not_build_final_words(self) -> None:
+    def test_segment_buffer_tracks_accepted_segments(self) -> None:
         buffer = SegmentPredictionBuffer(self.make_config())
-        self.assertFalse(hasattr(buffer, "accepted_words"))
+        self.assertEqual(buffer.accepted_segments, [])
+
+    def test_segment_buffer_builds_sentence_from_accepted_segments(self) -> None:
+        buffer = SegmentPredictionBuffer(self.make_config())
+        feature = np.zeros((30, 1), dtype=np.float32)
+        for word in ("hola", "agua"):
+            detection = SignDetection(
+                word=word,
+                confidence=0.9,
+                start_frame=0,
+                end_frame=4,
+                support=1,
+                feature=feature,
+            )
+            result = SentenceResult(
+                sentence=word.upper(),
+                words=(word,),
+                detections=(detection,),
+                candidates=(detection,),
+                visual_score=0.9,
+                language_score=0.0,
+                total_score=0.9,
+            )
+            buffer.accepted_segments.append(
+                SegmentPrediction(
+                    sequence=np.zeros((4, 2, 21, 3), dtype=np.float32),
+                    result=result,
+                    confidence=0.9,
+                    model_confidence=0.9,
+                )
+            )
+
+        result = buffer.build_sentence_result()
+        self.assertEqual(result.sentence, "HOLA AGUA")
+        self.assertEqual(result.words, ("hola", "agua"))
+        self.assertEqual(len(result.detections), 2)
+
+    def test_segment_buffer_collapses_consecutive_duplicate_words(self) -> None:
+        buffer = SegmentPredictionBuffer(self.make_config())
+        feature = np.zeros((30, 1), dtype=np.float32)
+        for index, word in enumerate(("usted", "usted", "tener", "casa", "casa")):
+            detection = SignDetection(
+                word=word,
+                confidence=0.8 + index * 0.01,
+                start_frame=0,
+                end_frame=4,
+                support=1,
+                feature=feature,
+            )
+            result = SentenceResult(
+                sentence=word.upper(),
+                words=(word,),
+                detections=(detection,),
+                candidates=(detection,),
+                visual_score=detection.confidence,
+                language_score=0.0,
+                total_score=detection.confidence,
+            )
+            buffer.accepted_segments.append(
+                SegmentPrediction(
+                    sequence=np.zeros((4, 2, 21, 3), dtype=np.float32),
+                    result=result,
+                    confidence=detection.confidence,
+                    model_confidence=detection.confidence,
+                )
+            )
+
+        result = buffer.build_sentence_result()
+        self.assertEqual(result.sentence, "USTED TENER CASA")
+        self.assertEqual(result.words, ("usted", "tener", "casa"))
+        self.assertEqual([detection.word for detection in result.detections], ["usted", "tener", "casa"])
+
+    def test_godot_output_keeps_only_sentence_visual_score_and_detections(self) -> None:
+        detection = SignDetection(
+            word="casa",
+            confidence=0.9,
+            start_frame=0,
+            end_frame=4,
+            support=1,
+            feature=np.zeros((30, 1), dtype=np.float32),
+        )
+        result = SentenceResult(
+            sentence="CASA",
+            words=("casa",),
+            detections=(detection,),
+            candidates=(detection,),
+            visual_score=0.9,
+            language_score=0.4,
+            total_score=1.3,
+        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "output.txt"
+            write_godot_output(path, result)
+            output = path.read_text(encoding="utf-8")
+
+        self.assertIn("Oración: CASA", output)
+        self.assertIn("Score visual: 0.900", output)
+        self.assertIn("Detecciones:", output)
+        self.assertNotIn("Score lenguaje", output)
 
     def test_static_signature_reports_dominance_state(self) -> None:
         signature = static_landmark_signature(np.asarray([hand_frame(), hand_frame()], dtype=np.float32))
