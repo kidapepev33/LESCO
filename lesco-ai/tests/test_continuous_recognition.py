@@ -21,6 +21,7 @@ from continuous_recognition import (  # noqa: E402
     concatenate_samples,
     group_repeated_detections,
 )
+from detection_grouping import same_temporal_event, static_signature_for_range  # noqa: E402
 from feature_extraction import FEATURE_SIZE, SEQUENCE_LENGTH, extract_landmark_features  # noqa: E402
 from model_utils import load_label_map, load_sign_model  # noqa: E402
 
@@ -30,6 +31,18 @@ def synthetic_feature(value: float = 0.0) -> np.ndarray:
 
 
 class TemporalDeduplicationTests(unittest.TestCase):
+    def test_temporal_helpers_live_in_detection_grouping(self) -> None:
+        self.assertTrue(same_temporal_event(0, 30, 8, 38))
+        self.assertFalse(same_temporal_event(0, 30, 60, 90))
+
+    def test_static_signature_for_range_picks_strongest_overlap(self) -> None:
+        first = {"dominant_landmark": 1, "dominance": 30.0, "accepted": True}
+        second = {"dominant_landmark": 2, "dominance": 40.0, "accepted": True}
+
+        signature = static_signature_for_range(8, 20, [(0, 10, first), (10, 24, second)])
+
+        self.assertIs(signature, second)
+
     def test_merges_overlapping_querer_detections(self) -> None:
         feature = synthetic_feature()
         predictions = [

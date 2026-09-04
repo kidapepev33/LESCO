@@ -57,6 +57,27 @@ def write_frame_atomic(output_path: Path, temp_path: Path, frame) -> None:
     os.replace(temp_path, output_path)
 
 
+def write_godot_output(output_text_path: Path, result: object | None, status: str = "") -> None:
+    """Write the final sentence and optional status for Godot."""
+    if result is None:
+        output_text_path.write_text(f"Oración: \nEstado: {status}", encoding="utf-8")
+        return
+
+    lines = [
+        f"Oración: {result.sentence}",
+        f"Score visual: {result.visual_score:.3f}",
+        "Detecciones:",
+    ]
+    for detection in result.detections:
+        lines.append(
+            f"{detection.word.upper()} "
+            f"conf={detection.confidence:.3f} "
+            f"frames={detection.start_frame}-{detection.end_frame} "
+            f"support={detection.support}"
+        )
+    output_text_path.write_text("\n".join(lines), encoding="utf-8")
+
+
 def open_video(video_path: Path):
     """Open a video file and return its capture, or None when unavailable."""
     import cv2

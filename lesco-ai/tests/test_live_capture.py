@@ -15,19 +15,19 @@ import sys
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
 import predict_live  # noqa: E402
+from debug_view import write_debug_response  # noqa: E402
 from feature_extraction import extract_landmark_features, static_landmark_signature, temporal_resample  # noqa: E402
 from hand_tracker import select_continuous_hand, select_two_hand_slots  # noqa: E402
+from live_session import CaptureState, LandmarkClipRecorder  # noqa: E402
 from model_utils import load_label_map, load_sign_model  # noqa: E402
 from continuous_recognition import SentenceResult, SignDetection  # noqa: E402
 from predict_live import (  # noqa: E402
-    CaptureState,
-    LandmarkClipRecorder,
     SegmentPrediction,
     SegmentPredictionBuffer,
-    write_debug_response,
     write_godot_output,
 )
 from runtime_config import LiveRecognitionConfig, load_runtime_config, save_runtime_config  # noqa: E402
+from segment_prediction import top_model_predictions  # noqa: E402
 
 
 def hand_frame(value: float = 1.0) -> np.ndarray:
@@ -250,6 +250,16 @@ class LiveClipRecorderTests(unittest.TestCase):
         buffer = SegmentPredictionBuffer(self.make_config())
         self.assertEqual(buffer.accepted_segments, [])
 
+    def test_top_model_predictions_is_available_from_segment_prediction(self) -> None:
+        top = top_model_predictions(
+            np.asarray([0.2, 0.7, 0.1], dtype=np.float32),
+            {0: "casa", 1: "hola", 2: "agua"},
+            top_k=2,
+        )
+
+        self.assertEqual(top[0][0], "hola")
+        self.assertEqual(top[1][0], "casa")
+
     def test_segment_buffer_does_not_concat_low_confidence_segments(self) -> None:
         buffer = SegmentPredictionBuffer(self.make_config())
         first_sequence = np.zeros((4, 2, 21, 3), dtype=np.float32)
@@ -389,7 +399,7 @@ class LiveClipRecorderTests(unittest.TestCase):
         self.assertEqual(result.sentence, "HOLA AGUA")
         self.assertEqual([(det.word, det.start_frame, det.end_frame) for det in result.detections], [("hola", 1, 3), ("agua", 6, 9)])
 
-    def test_exit_movement_after_confirmed_pause_is_debugged_but_not_accepted(self) -> None:
+    def test_exit_movement_after_confirmed_pause_is_accepted_by_confidence(self) -> None:
         recorder = LandmarkClipRecorder(self.make_config(), fps=10)
         buffer = SegmentPredictionBuffer(self.make_config(min_confidence=0.5))
 
@@ -456,7 +466,7 @@ class LiveClipRecorderTests(unittest.TestCase):
                 movement_exit=exit_step.movement_exit,
             )
 
-        self.assertEqual([segment.result.words[0] for segment in buffer.accepted_segments], ["casa"])
+        self.assertEqual([segment.result.words[0] for segment in buffer.accepted_segments], ["casa", "dormir"])
         self.assertEqual(len(buffer.raw_debug_entries), 2)
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -464,10 +474,11 @@ class LiveClipRecorderTests(unittest.TestCase):
             write_debug_response(path, buffer, buffer.build_sentence_result())
             output = path.read_text(encoding="utf-8")
 
-        self.assertIn("DECISION: DESCARTADO | MOVIMIENTO DE SALIDA", output)
+        self.assertNotIn("MOVIMIENTO DE SALIDA", output)
         self.assertIn("1. DORMIR: 0.42", output)
-        self.assertIn("=== PALABRAS ACEPTADAS ===\nCASA", output)
-        self.assertIn("=== SALIDA FINAL ===\nCASA", output)
+        self.assertIn("DECISION: ACEPTADO", output)
+        self.assertIn("=== PALABRAS ACEPTADAS ===\nCASA DORMIR", output)
+        self.assertIn("=== SALIDA FINAL ===\nCASA DORMIR", output)
 
     def test_single_sign_ending_by_absence_is_not_exit_movement(self) -> None:
         recorder = LandmarkClipRecorder(self.make_config(), fps=10)
@@ -484,7 +495,7 @@ class LiveClipRecorderTests(unittest.TestCase):
         self.assertFalse(step.movement_exit)
         self.assertIsNotNone(step.finalized_clip)
 
-    def test_yo_tener_casa_exit_movement_does_not_contaminate_final_sentence(self) -> None:
+    def test_yo_tener_casa_exit_movement_can_enter_final_sentence(self) -> None:
         recorder = LandmarkClipRecorder(self.make_config(), fps=10)
         buffer = SegmentPredictionBuffer(self.make_config(min_confidence=0.5))
         classified_sequences: list[np.ndarray] = []
@@ -578,13 +589,12 @@ class LiveClipRecorderTests(unittest.TestCase):
 
         result = buffer.build_sentence_result()
 
-        self.assertEqual([segment.result.words[0] for segment in buffer.accepted_segments], ["yo", "tener", "casa"])
-        self.assertEqual(result.words, ("yo", "tener", "casa"))
-        self.assertEqual(result.sentence, "YO TENER CASA")
+        self.assertEqual([segment.result.words[0] for segment in buffer.accepted_segments], ["yo", "tener", "casa", "dormir"])
+        self.assertEqual(result.words, ("yo", "tener", "casa", "dormir"))
+        self.assertEqual(result.sentence, "YO TENER CASA DORMIR")
         self.assertEqual(len(classified_sequences), 4)
-        self.assertEqual([len(segment.sequence) for segment in buffer.accepted_segments], [3, 3, 3])
+        self.assertEqual([len(segment.sequence) for segment in buffer.accepted_segments], [3, 3, 3, 2])
         self.assertEqual(len(classified_sequences[-1]), 2)
-        self.assertTrue(buffer.raw_debug_entries[-1].movement_exit)
 
     def test_segment_buffer_builds_sentence_from_accepted_segments(self) -> None:
         buffer = SegmentPredictionBuffer(self.make_config())

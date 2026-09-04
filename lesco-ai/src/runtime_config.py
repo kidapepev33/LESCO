@@ -80,3 +80,20 @@ def save_runtime_config(config: LiveRecognitionConfig, path: Path) -> None:
     config.validate()
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(config.to_dict(), indent=2, sort_keys=True), encoding="utf-8")
+
+
+def apply_arg_overrides(config: LiveRecognitionConfig, args: object) -> LiveRecognitionConfig:
+    """Apply explicit CLI overrides without changing the saved config."""
+    data = config.to_dict()
+    if getattr(args, "stride", None) is not None:
+        data["stride"] = args.stride
+    if getattr(args, "min_confidence", None) is not None:
+        data["min_confidence"] = args.min_confidence
+    if getattr(args, "record_seconds", None) is not None:
+        data["max_clip_seconds"] = args.record_seconds
+    if getattr(args, "save_clip", None) is not None:
+        data["save_debug_clips"] = True
+        data["save_clip_dir"] = str(args.save_clip.parent)
+    if getattr(args, "no_prototypes", False):
+        data["use_prototypes"] = False
+    return LiveRecognitionConfig.from_dict(data)

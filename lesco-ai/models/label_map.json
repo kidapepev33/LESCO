@@ -9,10 +9,11 @@
     "escuela": 6,
     "gracias": 7,
     "hola": 8,
-    "si": 9,
-    "tener": 10,
-    "usted": 11,
-    "yo": 12
+    "querer": 9,
+    "si": 10,
+    "tener": 11,
+    "usted": 12,
+    "yo": 13
   },
   "index_to_label": {
     "0": "agua",
@@ -24,10 +25,11 @@
     "6": "escuela",
     "7": "gracias",
     "8": "hola",
-    "9": "si",
-    "10": "tener",
-    "11": "usted",
-    "12": "yo"
+    "9": "querer",
+    "10": "si",
+    "11": "tener",
+    "12": "usted",
+    "13": "yo"
   },
   "sequence_length": 30,
   "feature_size": 436,

@@ -1,6 +1,4 @@
-Oración: YO TENER CASA
-Score visual: 0.926
+Oración: DORMIR
+Score visual: 0.998
 Detecciones:
-YO conf=0.995 frames=1-4 support=1
-TENER conf=0.963 frames=21-34 support=1
-CASA conf=0.820 frames=50-64 support=1
+DORMIR conf=0.998 frames=1-8 support=1
