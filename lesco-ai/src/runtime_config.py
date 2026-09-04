@@ -23,7 +23,6 @@ class LiveRecognitionConfig:
     show_landmarks: bool = True
     save_debug_clips: bool = False
     save_clip_dir: str = "clips/debug"
-    debug: bool = False
 
     def validate(self) -> None:
         """Raise ``ValueError`` when a setting is outside its safe range."""

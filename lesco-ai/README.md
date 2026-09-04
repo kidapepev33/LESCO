@@ -98,12 +98,6 @@ El sistema espera a que aparezcan manos de forma estable, graba mientras se
 realizan varias señas, finaliza cuando las manos desaparecen durante el tiempo
 configurado, procesa la secuencia y vuelve automáticamente a esperar.
 
-Modo debug:
-
-```bash
-python src/predict_live.py --debug
-```
-
 Configuración local:
 
 ```bash
@@ -119,8 +113,11 @@ python src/predict_live.py --input-npy clip.npy
 Guardar clips de debug:
 
 ```bash
-python src/predict_live.py --debug --save-clip clips/demo.npy
+python src/predict_live.py --save-clip clips/demo.npy
 ```
+
+Las predicciones crudas recientes del modo vivo se escriben en
+`godot_bridge/debug_response.txt`.
 
 ## Pruebas
 

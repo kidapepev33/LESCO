@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import argparse
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import Enum
 from pathlib import Path
 import time
@@ -23,12 +23,13 @@ from config_ui import open_config_editor
 from continuous_recognition import (
     ContinuousRecognizer,
     PrototypeLibrary,
+    SentenceBuilder,
     SentenceResult,
     SignDetection,
     StaticSegment,
     sliding_window_ranges,
 )
-from debug_view import draw_debug_overlay, draw_normal_overlay
+from debug_view import draw_normal_overlay
 from feature_extraction import extract_landmark_features, palm_scale, static_landmark_signature
 from hand_tracker import HandTracker, select_two_hand_slots
 from runtime_config import LiveRecognitionConfig, default_config_path, load_runtime_config
@@ -62,6 +63,7 @@ class RecorderStep:
     discarded_too_short: bool = False
     reached_max_duration: bool = False
     sentence_ended: bool = False
+    movement_exit: bool = False
 
 
 @dataclass
@@ -83,6 +85,7 @@ class LandmarkClipRecorder:
     previous_movement_score: float = 0.0
     sentence_end_reported: bool = False
     segment_start_frame: int | None = None
+    segment_started_after_confirmed_pause: bool = False
 
     @property
     def end_threshold(self) -> int:
@@ -122,6 +125,7 @@ class LandmarkClipRecorder:
         self.previous_velocity = None
         self.previous_movement_score = 0.0
         self.segment_start_frame = None
+        self.segment_started_after_confirmed_pause = False
 
     def step(self, landmarks: np.ndarray | None) -> RecorderStep:
         """Advance the recorder using one camera frame."""
@@ -153,6 +157,7 @@ class LandmarkClipRecorder:
             self.observed_recording_frames = 1
             self.segment_start_frame = len(self.sentence_frames) - 1
             self.clip_frames = [frame]
+            self.segment_started_after_confirmed_pause = False
             return RecorderStep(self.state)
 
         if self.state in {CaptureState.MOVING, CaptureState.POSSIBLE_PAUSE}:
@@ -225,7 +230,8 @@ class LandmarkClipRecorder:
         reached_max_duration: bool = False,
         next_segment_frame: np.ndarray | None = None,
     ) -> RecorderStep:
-        clip = np.asarray(self.clip_frames, dtype=np.float32)
+        clip_frames = self._segment_frames_without_confirmed_pause()
+        clip = np.asarray(clip_frames, dtype=np.float32)
         static_signature = self._confirmed_static_signature()
         start_frame = self.segment_start_frame
         end_frame = None if start_frame is None else start_frame + len(clip)
@@ -237,6 +243,7 @@ class LandmarkClipRecorder:
             self.observed_recording_frames = 1
             self.segment_start_frame = len(self.sentence_frames) - 1
             self.clip_frames = [next_segment_frame]
+            self.segment_started_after_confirmed_pause = True
         if too_short:
             return RecorderStep(self.state, discarded_too_short=True, reached_max_duration=reached_max_duration)
         return RecorderStep(
@@ -248,14 +255,24 @@ class LandmarkClipRecorder:
             reached_max_duration=reached_max_duration,
         )
 
+    def _segment_frames_without_confirmed_pause(self) -> list[np.ndarray]:
+        if self.pause_counter < self.end_threshold or not self.possible_pause_frames:
+            return list(self.clip_frames)
+        pause_len = min(len(self.possible_pause_frames), len(self.clip_frames))
+        if pause_len == 0:
+            return list(self.clip_frames)
+        return list(self.clip_frames[:-pause_len])
+
     def _finish_sentence(self) -> RecorderStep:
         sentence_clip = np.asarray(self.sentence_frames, dtype=np.float32)
         finalized_clip = None
         static_signature = self._confirmed_static_signature()
         start_frame = self.segment_start_frame
         end_frame = None
-        if self.recorded_frames >= self.min_clip_frames:
-            finalized_clip = np.asarray(self.clip_frames, dtype=np.float32)
+        clip_frames = self._segment_frames_without_confirmed_pause()
+        movement_exit = self.segment_started_after_confirmed_pause and self.pause_counter < self.end_threshold
+        if len(clip_frames) >= self.min_clip_frames or (movement_exit and clip_frames):
+            finalized_clip = np.asarray(clip_frames, dtype=np.float32)
             end_frame = None if start_frame is None else start_frame + len(finalized_clip)
 
         if len(sentence_clip) < self.min_clip_frames:
@@ -273,6 +290,7 @@ class LandmarkClipRecorder:
             finalized_end_frame=end_frame,
             finalized_sentence_clip=sentence_clip,
             sentence_ended=True,
+            movement_exit=movement_exit,
         )
 
     def _clear_segment(self) -> None:
@@ -283,6 +301,7 @@ class LandmarkClipRecorder:
         self.clip_frames.clear()
         self.possible_pause_frames.clear()
         self.segment_start_frame = None
+        self.segment_started_after_confirmed_pause = False
 
     def _confirmed_static_signature(self) -> dict[str, object] | None:
         if not USE_STATIC_LANDMARK_SIGNATURES:
@@ -315,109 +334,116 @@ class SegmentPrediction:
     model_confidence: float
     static_signature: dict[str, object] | None = None
     static_score: float | None = None
+    start_frame: int | None = None
+    end_frame: int | None = None
+    raw_top_predictions: tuple[tuple[str, float], ...] = ()
+
+
+@dataclass(frozen=True)
+class RawSegmentDebugEntry:
+    """Raw model output for one classified live segment."""
+
+    segment_number: int
+    frame_count: int
+    top_predictions: tuple[tuple[str, float], ...]
+    accepted: bool
+    threshold: float
+    movement_exit: bool = False
+    start_frame: int | None = None
+    end_frame: int | None = None
 
 
 @dataclass
 class SegmentDecision:
-    """Decision after comparing individual and concatenated segment predictions."""
+    """Decision for one independently classified segment."""
 
     accepted: SegmentPrediction | None = None
     individual_confidence: float | None = None
-    concatenated_confidence: float | None = None
 
 
 @dataclass
 class SegmentPredictionBuffer:
-    """Hold low-confidence segments until the following segment can be compared."""
+    """Collect accepted independent segment predictions for the current sentence."""
 
     config: LiveRecognitionConfig
-    pending: SegmentPrediction | None = None
     accepted_segments: list[SegmentPrediction] = field(default_factory=list)
+    raw_debug_entries: list[RawSegmentDebugEntry] = field(default_factory=list)
     detected_segments: int = 0
     last_individual_confidence: float | None = None
-    last_concatenated_confidence: float | None = None
     last_static_signature: dict[str, object] | None = None
     last_static_score: float | None = None
-
-    @property
-    def has_pending(self) -> bool:
-        return self.pending is not None
 
     def submit(
         self,
         sequence: np.ndarray,
         recognizer: ContinuousRecognizer,
         static_signature: dict[str, object] | None = None,
+        start_frame: int | None = None,
+        end_frame: int | None = None,
+        movement_exit: bool = False,
     ) -> SegmentDecision:
         self.detected_segments += 1
         individual = classify_segment(sequence, recognizer, static_signature=static_signature)
-        concatenated: SegmentPrediction | None = None
-        if self.pending is not None:
-            concatenated_sequence = np.concatenate([self.pending.sequence, sequence], axis=0)
-            joined_signature = static_signature if static_signature is not None else self.pending.static_signature
-            concatenated = classify_segment(concatenated_sequence, recognizer, static_signature=joined_signature)
+        individual = replace(individual, start_frame=start_frame, end_frame=end_frame)
 
         accepted: SegmentPrediction | None = None
-        if concatenated is not None and self._is_acceptable_join(concatenated, individual):
-            accepted = concatenated
-            self.pending = None
-        elif individual.confidence >= self.config.min_confidence:
+        if not movement_exit and individual.confidence >= self.config.min_confidence:
             accepted = individual
-            self.pending = None
-        else:
-            self.pending = individual
+
+        self.raw_debug_entries.append(
+            RawSegmentDebugEntry(
+                segment_number=self.detected_segments,
+                frame_count=len(sequence),
+                top_predictions=individual.raw_top_predictions,
+                accepted=accepted is not None,
+                threshold=self.config.min_confidence,
+                movement_exit=movement_exit,
+                start_frame=start_frame,
+                end_frame=end_frame,
+            )
+        )
+        self.raw_debug_entries = self.raw_debug_entries[-5:]
 
         if accepted is not None:
             self.accepted_segments.append(accepted)
 
         self.last_individual_confidence = individual.confidence
-        self.last_concatenated_confidence = None if concatenated is None else concatenated.confidence
         self.last_static_signature = static_signature
         self.last_static_score = individual.static_score
 
         return SegmentDecision(
             accepted=accepted,
             individual_confidence=self.last_individual_confidence,
-            concatenated_confidence=self.last_concatenated_confidence,
-        )
-
-    def _is_acceptable_join(self, joined: SegmentPrediction, individual: SegmentPrediction) -> bool:
-        if self.pending is None:
-            return False
-        return (
-            joined.confidence >= self.config.min_confidence
-            and joined.confidence > self.pending.confidence
-            and joined.confidence > individual.confidence
         )
 
     def reset_sentence(self) -> None:
-        self.pending = None
         self.accepted_segments.clear()
         self.detected_segments = 0
         self.last_individual_confidence = None
-        self.last_concatenated_confidence = None
         self.last_static_signature = None
         self.last_static_score = None
+
+    def reset_debug_sentence(self) -> None:
+        self.reset_sentence()
+        self.raw_debug_entries.clear()
 
     def build_sentence_result(self) -> SentenceResult:
         if not self.accepted_segments:
             return SentenceResult("", (), (), (), 0.0, 0.0, 0.0)
 
-        words: list[str] = []
         detections: list[SignDetection] = []
-        candidates: list[SignDetection] = []
         visual_scores: list[float] = []
         frame_offset = 0
         for segment in self.accepted_segments:
-            words.extend(segment.result.words)
             visual_scores.append(segment.confidence)
+            segment_offset = segment.start_frame if segment.start_frame is not None else frame_offset
             for detection in segment.result.detections:
                 detections.append(
                     SignDetection(
                         word=detection.word,
                         confidence=detection.confidence,
-                        start_frame=frame_offset + detection.start_frame,
-                        end_frame=frame_offset + detection.end_frame,
+                        start_frame=segment_offset + detection.start_frame,
+                        end_frame=segment_offset + detection.end_frame,
                         support=detection.support,
                         feature=detection.feature,
                         prototype_score=detection.prototype_score,
@@ -428,37 +454,19 @@ class SegmentPredictionBuffer:
                         static_accepted=detection.static_accepted,
                     )
                 )
-            candidates.extend(detections[-len(segment.result.detections) :])
             frame_offset += len(segment.sequence)
 
-        words, detections = collapse_consecutive_duplicate_detections(detections)
-        candidates = detections
+        result = SentenceBuilder().build(detections, suppress_competing=False)
         visual_score = float(np.mean(visual_scores)) if visual_scores else 0.0
         return SentenceResult(
-            sentence=" ".join(words).upper(),
-            words=tuple(words),
-            detections=tuple(detections),
-            candidates=tuple(candidates),
+            sentence=result.sentence,
+            words=result.words,
+            detections=result.detections,
+            candidates=result.candidates,
             visual_score=visual_score,
-            language_score=0.0,
-            total_score=visual_score,
+            language_score=result.language_score,
+            total_score=visual_score + result.language_score,
         )
-
-
-def collapse_consecutive_duplicate_detections(detections: list[SignDetection]) -> tuple[list[str], list[SignDetection]]:
-    """Collapse repeated adjacent words for user-facing sentence output."""
-    if not detections:
-        return [], []
-
-    collapsed: list[SignDetection] = []
-    for detection in detections:
-        if collapsed and collapsed[-1].word == detection.word:
-            previous = collapsed[-1]
-            if detection.confidence > previous.confidence:
-                collapsed[-1] = detection
-            continue
-        collapsed.append(detection)
-    return [detection.word for detection in collapsed], collapsed
 
 
 def classify_segment(
@@ -470,6 +478,7 @@ def classify_segment(
     sequence = np.asarray(sequence, dtype=np.float32)
     feature = extract_landmark_features(sequence)
     probs = recognizer.model.predict(feature[None, ...], verbose=0)[0]
+    raw_top_predictions = top_model_predictions(probs, recognizer.index_to_label, top_k=3)
     index = int(np.argmax(probs))
     model_confidence = float(probs[index])
     word = recognizer.index_to_label.get(index, f"Clase {index}")
@@ -504,7 +513,53 @@ def classify_segment(
         model_confidence=model_confidence,
         static_signature=static_signature,
         static_score=static_score,
+        raw_top_predictions=raw_top_predictions,
     )
+
+
+def top_model_predictions(
+    probabilities: np.ndarray,
+    index_to_label: dict[int, str],
+    top_k: int = 3,
+) -> tuple[tuple[str, float], ...]:
+    """Return raw model top-k labels before runtime filters."""
+    probs = np.asarray(probabilities, dtype=np.float32)
+    top_indices = np.argsort(probs)[::-1][:top_k]
+    return tuple((index_to_label.get(int(index), f"Clase {int(index)}"), float(probs[index])) for index in top_indices)
+
+
+def write_debug_response(
+    debug_path: Path,
+    segment_buffer: SegmentPredictionBuffer,
+    final_result: SentenceResult | None = None,
+) -> None:
+    """Write raw live segment predictions without changing recognition behavior."""
+    lines = ["=== PREDICCIONES CRUDAS ==="]
+    for entry in segment_buffer.raw_debug_entries:
+        frame_range = ""
+        if entry.start_frame is not None and entry.end_frame is not None:
+            frame_range = f" | RANGO: {entry.start_frame}-{entry.end_frame}"
+        lines.append(f"SEGMENTO {entry.segment_number} | FRAMES: {entry.frame_count}{frame_range}")
+        for rank, (word, probability) in enumerate(entry.top_predictions, start=1):
+            lines.append(f"{rank}. {word.upper()}: {probability:.2f}")
+        if entry.movement_exit:
+            lines.append("DECISION: DESCARTADO | MOVIMIENTO DE SALIDA")
+        elif entry.accepted:
+            lines.append("DECISION: ACEPTADO")
+        else:
+            lines.append(f"DECISION: RECHAZADO | UMBRAL: {entry.threshold:.2f}")
+        lines.append("")
+
+    lines.append("=== PALABRAS ACEPTADAS ===")
+    accepted_words = [word.upper() for segment in segment_buffer.accepted_segments for word in segment.result.words]
+    lines.append(" ".join(accepted_words))
+    lines.append("")
+
+    lines.append("=== SALIDA FINAL ===")
+    lines.append("" if final_result is None else final_result.sentence)
+
+    debug_path.parent.mkdir(parents=True, exist_ok=True)
+    debug_path.write_text("\n".join(lines), encoding="utf-8")
 
 
 def parse_args() -> argparse.Namespace:
@@ -514,12 +569,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--record-seconds",
         type=float,
-        help="Herramienta debug: usa este valor como duración máxima de clip.",
+        help="Usa este valor como duración máxima de clip.",
     )
-    parser.add_argument("--stride", type=int, help="Override debug para stride de ventanas temporales.")
-    parser.add_argument("--min-confidence", type=float, help="Override debug para confianza mínima.")
+    parser.add_argument("--stride", type=int, help="Override para stride de ventanas temporales.")
+    parser.add_argument("--min-confidence", type=float, help="Override para confianza mínima.")
     parser.add_argument("--save-clip", type=Path, help="Guarda clips capturados en .npy.")
-    parser.add_argument("--debug", action="store_true", help="Muestra overlay técnico y salida detallada.")
     parser.add_argument("--config", action="store_true", help="Abre la configuración local y sale.")
     parser.add_argument("--no-prototypes", action="store_true", help="Desactiva validación gestual por prototipos.")
     return parser.parse_args()
@@ -537,8 +591,6 @@ def apply_arg_overrides(config: LiveRecognitionConfig, args: argparse.Namespace)
     if args.save_clip is not None:
         data["save_debug_clips"] = True
         data["save_clip_dir"] = str(args.save_clip.parent)
-    if args.debug:
-        data["debug"] = True
     if args.no_prototypes:
         data["use_prototypes"] = False
     return LiveRecognitionConfig.from_dict(data)
@@ -591,12 +643,9 @@ def write_godot_output(output_text_path: Path, result: SentenceResult | None, st
     output_text_path.write_text("\n".join(lines), encoding="utf-8")
 
 
-def print_result(result: SentenceResult, debug: bool = False, processing_ms: float | None = None) -> None:
+def print_result(result: SentenceResult, processing_ms: float | None = None) -> None:
     """Print the continuous-recognition result."""
     print(f"Oración: {result.sentence}")
-    if not debug:
-        return
-
     if processing_ms is not None:
         print(f"Procesamiento: {processing_ms:.1f} ms")
     print(f"Score visual: {result.visual_score:.3f}")
@@ -651,7 +700,7 @@ def run_offline_clip(args: argparse.Namespace, config: LiveRecognitionConfig, ou
     recognizer = ContinuousRecognizer(prototypes=prototypes)
     result, elapsed_ms, _ = process_sequence(sequence, recognizer, config)
     write_godot_output(output_text_path, result)
-    print_result(result, debug=config.debug, processing_ms=elapsed_ms)
+    print_result(result, processing_ms=elapsed_ms)
 
 
 def draw_frame(
@@ -664,39 +713,18 @@ def draw_frame(
     segment_buffer: SegmentPredictionBuffer | None = None,
     sentence_status: str = "",
 ) -> np.ndarray:
-    """Draw either normal or debug camera information."""
-    if config.debug:
-        static_signature = None
-        static_score = None
-        if segment_buffer is not None:
-            static_signature = segment_buffer.last_static_signature
-            static_score = segment_buffer.last_static_score
-        return draw_debug_overlay(
-            frame,
-            state=recorder.state.value,
-            recorded_frames=recorder.recorded_frames,
-            pause_counter=recorder.pause_counter,
-            end_threshold=recorder.end_threshold,
-            movement=recorder.current_movement,
-            no_hand_frames=recorder.no_hand_frames,
-            no_hand_threshold=recorder.no_hand_threshold,
-            has_pending_low_confidence=segment_buffer.has_pending if segment_buffer is not None else False,
-            detected_segments=0 if segment_buffer is None else segment_buffer.detected_segments,
-            individual_confidence=None if segment_buffer is None else segment_buffer.last_individual_confidence,
-            concatenated_confidence=None if segment_buffer is None else segment_buffer.last_concatenated_confidence,
-            static_signature=static_signature,
-            static_score=static_score,
-            sentence_status=sentence_status,
-            config=config,
-            window_count=window_count,
-            processing_ms=processing_ms,
-            result=result,
-        )
+    """Draw normal camera information."""
     sentence = "" if result is None else result.sentence
     return draw_normal_overlay(frame, recorder.state.value, sentence=sentence)
 
 
-def run_camera(args: argparse.Namespace, config: LiveRecognitionConfig, output_text_path: Path, output_frame_path: Path) -> None:
+def run_camera(
+    args: argparse.Namespace,
+    config: LiveRecognitionConfig,
+    output_text_path: Path,
+    output_frame_path: Path,
+    debug_response_path: Path,
+) -> None:
     """Run the camera state machine until the user quits."""
     tracker = HandTracker(
         max_num_hands=MAX_NUM_HANDS,
@@ -725,6 +753,7 @@ def run_camera(args: argparse.Namespace, config: LiveRecognitionConfig, output_t
     sentence_static_segments: list[StaticSegment] = []
     previous_selected_frame: np.ndarray | None = None
     write_godot_output(output_text_path, None, status=CaptureState.WAITING.value)
+    write_debug_response(debug_response_path, segment_buffer, last_result)
 
     try:
         while True:
@@ -742,12 +771,16 @@ def run_camera(args: argparse.Namespace, config: LiveRecognitionConfig, output_t
             if config.show_landmarks:
                 frame = tracker.draw_landmarks(frame, results)
 
-            if landmarks is not None and last_sentence_status:
+            step = recorder.step(landmarks)
+            if last_sentence_status and step.state == CaptureState.MOVING and recorder.recorded_frames == 1:
                 last_result = None
                 last_sentence_status = ""
+                last_processing_ms = None
+                last_window_count = 0
+                segment_buffer.reset_debug_sentence()
                 write_godot_output(output_text_path, None, status=CaptureState.WAITING.value)
+                write_debug_response(debug_response_path, segment_buffer, last_result)
 
-            step = recorder.step(landmarks)
             if step.discarded_too_short:
                 last_result = None
                 write_godot_output(output_text_path, None, status="Clip descartado por duración corta")
@@ -781,34 +814,29 @@ def run_camera(args: argparse.Namespace, config: LiveRecognitionConfig, output_t
 
                 save_clip_if_needed(step.finalized_clip, config, args.save_clip)
                 start = time.perf_counter()
-                decision = segment_buffer.submit(
+                segment_buffer.submit(
                     step.finalized_clip,
                     recognizer,
                     static_signature=step.finalized_static_signature,
+                    start_frame=step.finalized_start_frame,
+                    end_frame=step.finalized_end_frame,
+                    movement_exit=step.movement_exit,
                 )
                 last_processing_ms = (time.perf_counter() - start) * 1000.0
                 last_window_count = 1
-                if config.debug:
-                    print(
-                        "Segmento: "
-                        f"individual={decision.individual_confidence:.3f} "
-                        f"concat={'-' if decision.concatenated_confidence is None else f'{decision.concatenated_confidence:.3f}'} "
-                        f"pendiente={'si' if segment_buffer.has_pending else 'no'} "
-                        f"firma={'no' if step.finalized_static_signature is None else 'si'}"
-                    )
+                write_debug_response(debug_response_path, segment_buffer, last_result)
 
             if step.sentence_ended:
                 last_result = segment_buffer.build_sentence_result()
                 last_window_count = segment_buffer.detected_segments
                 if last_result.sentence:
                     write_godot_output(output_text_path, last_result)
-                    print_result(last_result, debug=config.debug, processing_ms=last_processing_ms)
+                    print_result(last_result, processing_ms=last_processing_ms)
                 else:
                     last_result = None
                     write_godot_output(output_text_path, None, status="Oracion cerrada sin prediccion confiable")
                 last_sentence_status = "Oracion cerrada por ausencia de manos"
-                if config.debug:
-                    print(last_sentence_status)
+                write_debug_response(debug_response_path, segment_buffer, last_result)
                 segment_buffer.reset_sentence()
                 sentence_static_segments.clear()
                 recorder.reset()
@@ -856,12 +884,13 @@ def main() -> None:
     godot_bridge_dir.mkdir(exist_ok=True)
     output_text_path = godot_bridge_dir / "output.txt"
     output_frame_path = godot_bridge_dir / "frame.jpg"
+    debug_response_path = godot_bridge_dir / "debug_response.txt"
 
     try:
         if args.input_npy is not None:
             run_offline_clip(args, config, output_text_path)
         else:
-            run_camera(args, config, output_text_path, output_frame_path)
+            run_camera(args, config, output_text_path, output_frame_path, debug_response_path)
     except Exception as exc:
         output_text_path.write_text(f"Oración: \nError: {exc}", encoding="utf-8")
         print(f"[ERROR] {exc}")

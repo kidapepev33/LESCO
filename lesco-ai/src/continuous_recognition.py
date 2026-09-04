@@ -370,6 +370,7 @@ class SentenceBuilder:
         self,
         detections: Sequence[SignDetection],
         prototypes: PrototypeLibrary | None = None,
+        suppress_competing: bool = True,
     ) -> SentenceResult:
         """Choose the most plausible sentence from temporal detections."""
         if not detections:
@@ -383,7 +384,7 @@ class SentenceBuilder:
             )
             for det in detections
         ]
-        scored = suppress_competing_detections(all_scored)
+        scored = suppress_competing_detections(all_scored) if suppress_competing else list(all_scored)
 
         beams: list[tuple[float, float, float, list[SignDetection]]] = [(0.0, 0.0, 0.0, [])]
         for det in scored:
