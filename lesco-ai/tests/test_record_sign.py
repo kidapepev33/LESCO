@@ -6,17 +6,23 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 import numpy as np
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(PROJECT_ROOT / "src"))
+sys.path.insert(0, str(PROJECT_ROOT))
 
-from record_sign import (  # noqa: E402
+from src.data.record_sign import (  # noqa: E402
+    COUNTDOWN_SECONDS,
+    FRAMES_PER_SAMPLE,
     HANDS_PER_FRAME,
     LANDMARK_DIMS,
     LANDMARKS_PER_HAND,
+    RecordingCycle,
+    RecordingState,
     fill_missing_two_hand_frames,
+    parse_args,
     sample_has_two_hands,
     save_sample,
 )
@@ -35,6 +41,81 @@ def two_hand_frame(value: float = 1.0) -> np.ndarray:
 
 
 class RecordSignTests(unittest.TestCase):
+    def test_recording_cycle_counts_down_and_captures_exactly_twenty_frames(self) -> None:
+        cycle = RecordingCycle()
+        cycle.start_countdown(10.0)
+
+        self.assertEqual(cycle.state, RecordingState.COUNTDOWN)
+        self.assertEqual(cycle.countdown_value(10.0), 3)
+        self.assertEqual(cycle.countdown_value(11.1), 2)
+        self.assertEqual(cycle.countdown_value(12.1), 1)
+
+        cycle.update_countdown(10.0 + COUNTDOWN_SECONDS)
+        self.assertEqual(cycle.state, RecordingState.CAPTURING)
+        for _ in range(FRAMES_PER_SAMPLE - 1):
+            self.assertFalse(cycle.add_valid_frame(one_hand_frame()))
+        self.assertTrue(cycle.add_valid_frame(one_hand_frame()))
+        self.assertEqual(len(cycle.frames), FRAMES_PER_SAMPLE)
+
+    def test_recording_cycle_ignores_invalid_frames(self) -> None:
+        cycle = RecordingCycle()
+        cycle.start_countdown(0.0)
+        cycle.update_countdown(COUNTDOWN_SECONDS)
+
+        self.assertFalse(cycle.add_valid_frame(np.zeros((HANDS_PER_FRAME, LANDMARKS_PER_HAND, LANDMARK_DIMS))))
+        self.assertEqual(len(cycle.frames), 0)
+
+    def test_completed_cycle_saves_exactly_twenty_frames(self) -> None:
+        cycle = RecordingCycle()
+        cycle.start_countdown(0.0)
+        cycle.update_countdown(COUNTDOWN_SECONDS)
+        for _ in range(FRAMES_PER_SAMPLE):
+            completed = cycle.add_valid_frame(one_hand_frame())
+
+        self.assertTrue(completed)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output = save_sample(Path(tmpdir), 1, cycle.frames)
+            saved = np.load(output)
+
+        self.assertEqual(saved.shape, (FRAMES_PER_SAMPLE, HANDS_PER_FRAME, LANDMARKS_PER_HAND, LANDMARK_DIMS))
+
+    def test_stop_cancels_countdown(self) -> None:
+        cycle = RecordingCycle()
+        cycle.start_countdown(0.0)
+        cycle.stop()
+
+        self.assertEqual(cycle.state, RecordingState.IDLE)
+        self.assertIsNone(cycle.countdown_deadline)
+        cycle.update_countdown(COUNTDOWN_SECONDS)
+        self.assertEqual(cycle.state, RecordingState.IDLE)
+
+    def test_stop_discards_partial_capture_and_allows_restart(self) -> None:
+        cycle = RecordingCycle()
+        cycle.start_countdown(0.0)
+        cycle.update_countdown(COUNTDOWN_SECONDS)
+        cycle.add_valid_frame(one_hand_frame())
+        cycle.stop()
+
+        self.assertEqual(cycle.state, RecordingState.IDLE)
+        self.assertEqual(cycle.frames, [])
+        self.assertIsNone(cycle.previous_frame)
+
+        cycle.start_countdown(20.0)
+        self.assertEqual(cycle.state, RecordingState.COUNTDOWN)
+
+    def test_two_hand_requirement_is_an_explicit_option(self) -> None:
+        with patch.object(sys, "argv", ["record_sign.py", "--label", "cualquiera"]):
+            default_args = parse_args()
+        with patch.object(
+            sys,
+            "argv",
+            ["record_sign.py", "--label", "cualquiera", "--require-two-hands"],
+        ):
+            two_hand_args = parse_args()
+
+        self.assertFalse(default_args.require_two_hands)
+        self.assertTrue(two_hand_args.require_two_hands)
+
     def test_save_sample_writes_two_hand_shape(self) -> None:
         frames = [one_hand_frame(), one_hand_frame()]
         with tempfile.TemporaryDirectory() as tmpdir:

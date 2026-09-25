@@ -1,0 +1,10 @@
+/* Conserva la suma de los paddings que antes aportaban .content y cada sección. */
+@media(max-width:720px) {
+  .content.home-page {
+    padding-top: 116px
+  }
+
+  .content.feature-page {
+    padding-top: 120px
+  }
+}

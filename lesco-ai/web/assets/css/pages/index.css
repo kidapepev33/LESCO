@@ -1,0 +1,117 @@
+.home-page {
+    position: relative;
+    isolation: isolate;
+    display: grid;
+    grid-template-rows: auto auto 1fr;
+    overflow: hidden;
+    padding: clamp(30px, 7vw, 40px) clamp(40px, 7vw, 60px) 0
+}
+
+.home-page:before {
+    content: "";
+    position: absolute;
+    inset: 20px;
+    z-index: -1;
+    border: 1px solid #e8af3c1f;
+    border-radius: 28px
+}
+
+.home-copy {
+    max-width: 900px
+}
+
+.home-copy h1 {
+    margin: 0;
+    color: var(--light-gold);
+    font-size: clamp(76px, 11vw, 160px);
+    letter-spacing: -.075em;
+    line-height: .92;
+    text-shadow: 0 3px #8b5d11, 0 16px 45px #e8af3c1f
+}
+
+.lead {
+    margin: 32px 0 8px;
+    font: clamp(22px, 2.2vw, 35px)/1.35 "Playfair Display", Georgia, serif
+}
+
+.supporting {
+    margin: 0;
+    color: var(--muted);
+    font-size: clamp(16px, 1.35vw, 21px);
+    line-height: 1.6
+}
+
+.primary-button {
+    display: inline-flex;
+    gap: 16px;
+    margin-top: 28px;
+    padding: 13px 22px;
+    border: 1px solid var(--gold);
+    border-radius: 99px;
+    color: var(--light-gold);
+    font-weight: 700;
+    text-decoration: none;
+    transition: .16s
+}
+
+.primary-button:hover {
+    background: var(--gold);
+    color: var(--dark);
+    transform: translateY(-2px)
+}
+
+blockquote {
+    z-index: 2;
+    justify-self: end;
+    margin: clamp(10px, 4vw, 20px) 2vw 0 0;
+    color: var(--light-gold);
+    font: italic clamp(27px, 3.9vw, 61px)/1.14 "Playfair Display", Georgia, serif;
+    text-align: right
+}
+
+.hero-art {
+    align-self: end;
+    justify-self: center;
+    width: min(90%, 980px);
+    margin-top: -15px
+}
+
+.hero-art img {
+    width: 100%;
+    filter: drop-shadow(0 22px 35px #0006)
+}
+
+@media(max-width:980px) {
+    .home-page {
+        padding-inline: 42px
+    }
+}
+
+@media(max-width:720px) {
+    .home-page {
+        padding: 48px 24px 0
+    }
+
+    .home-page:before {
+        inset: 10px
+    }
+
+    .home-copy h1 {
+        font-size: clamp(68px, 25vw, 106px)
+    }
+
+    .lead {
+        margin-top: 24px
+    }
+
+    blockquote {
+        justify-self: start;
+        margin: 44px 0 24px;
+        text-align: left
+    }
+
+    .hero-art {
+        width: 115%;
+        margin: 0 0 0 -12%
+    }
+}

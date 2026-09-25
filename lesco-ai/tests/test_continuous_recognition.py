@@ -10,9 +10,9 @@ import numpy as np
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 import sys
 
-sys.path.insert(0, str(PROJECT_ROOT / "src"))
+sys.path.insert(0, str(PROJECT_ROOT))
 
-from continuous_recognition import (  # noqa: E402
+from src.recognition.continuous import (  # noqa: E402
     ContinuousRecognizer,
     PrototypeLibrary,
     SentenceBuilder,
@@ -21,9 +21,9 @@ from continuous_recognition import (  # noqa: E402
     concatenate_samples,
     group_repeated_detections,
 )
-from detection_grouping import same_temporal_event, static_signature_for_range  # noqa: E402
-from feature_extraction import FEATURE_SIZE, SEQUENCE_LENGTH, extract_landmark_features  # noqa: E402
-from model_utils import load_label_map, load_sign_model  # noqa: E402
+from src.recognition.grouping import same_temporal_event, static_signature_for_range  # noqa: E402
+from src.vision.features import FEATURE_SIZE, SEQUENCE_LENGTH, extract_landmark_features  # noqa: E402
+from src.recognition.model import load_label_map, load_sign_model  # noqa: E402
 
 
 def synthetic_feature(value: float = 0.0) -> np.ndarray:
@@ -144,7 +144,7 @@ class ContinuousRecognitionTests(unittest.TestCase):
         self.assertEqual(result.sentence, "HOLA AGUA")
         self.assertGreaterEqual(len(result.candidates), 2)
 
-    def test_common_phrase_yo_querer_agua(self) -> None:
+    def test_preserves_visual_sequence_yo_querer_agua(self) -> None:
         words, result = self.recognize_labels(["yo", "querer", "agua"])
         self.assertEqual(words, ["yo", "querer", "agua"])
         self.assertTrue(all(det.start_frame < det.end_frame for det in result.detections))
@@ -213,15 +213,32 @@ class SentenceBuilderCleanupTests(unittest.TestCase):
         result = SentenceBuilder().build(detections)
         self.assertEqual(list(result.words), ["agua", "tener"])
 
-    def test_prefers_yo_tener_order_for_overlapping_pair(self) -> None:
+    def test_preserves_detected_order_without_label_specific_reordering(self) -> None:
         feature = synthetic_feature()
         detections = [
             SignDetection("tener", 0.997, 0, 54, 7, feature),
             SignDetection("yo", 0.942, 28, 62, 2, feature),
             SignDetection("bano", 0.961, 48, 84, 3, feature),
         ]
-        result = SentenceBuilder().build(detections)
-        self.assertEqual(list(result.words), ["yo", "tener", "bano"])
+        result = SentenceBuilder().build(detections, suppress_competing=False)
+        self.assertEqual(list(result.words), ["tener", "yo", "bano"])
+
+    def test_temporal_score_does_not_depend_on_specific_words(self) -> None:
+        feature = synthetic_feature()
+        first = [
+            SignDetection("yo", 0.95, 0, 20, 1, feature),
+            SignDetection("tener", 0.95, 30, 50, 1, feature),
+        ]
+        second = [
+            SignDetection("escuela", 0.95, 0, 20, 1, feature),
+            SignDetection("agua", 0.95, 30, 50, 1, feature),
+        ]
+
+        first_result = SentenceBuilder().build(first, suppress_competing=False)
+        second_result = SentenceBuilder().build(second, suppress_competing=False)
+
+        self.assertEqual(first_result.language_score, second_result.language_score)
+        self.assertEqual(first_result.total_score, second_result.total_score)
 
 
 if __name__ == "__main__":

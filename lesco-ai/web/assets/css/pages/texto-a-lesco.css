@@ -1,0 +1,33 @@
+.form-panel label {
+    display: block;
+    margin-bottom: 12px;
+    font-weight: 600
+}
+
+.form-panel textarea {
+    width: 100%;
+    padding: 18px;
+    border: 1px solid #fff2;
+    border-radius: 12px;
+    background: #0002;
+    color: var(--cream)
+}
+
+.form-panel>div {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin-top: 18px;
+    color: var(--muted);
+    font-size: 14px
+}
+
+.form-panel button {
+    padding: 13px 20px;
+    border: 0;
+    border-radius: 99px;
+    background: #68562e;
+    color: #b4a887;
+    cursor: not-allowed
+}

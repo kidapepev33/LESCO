@@ -12,22 +12,22 @@ import numpy as np
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 import sys
 
-sys.path.insert(0, str(PROJECT_ROOT / "src"))
+sys.path.insert(0, str(PROJECT_ROOT))
 
-import predict_live  # noqa: E402
-from debug_view import write_debug_response  # noqa: E402
-from feature_extraction import extract_landmark_features, static_landmark_signature, temporal_resample  # noqa: E402
-from hand_tracker import select_continuous_hand, select_two_hand_slots  # noqa: E402
-from live_session import CaptureState, LandmarkClipRecorder  # noqa: E402
-from model_utils import load_label_map, load_sign_model  # noqa: E402
-from continuous_recognition import SentenceResult, SignDetection  # noqa: E402
-from predict_live import (  # noqa: E402
+from src.recognition import predict_live  # noqa: E402
+from src.diagnostics.debug_view import write_debug_response  # noqa: E402
+from src.vision.features import extract_landmark_features, static_landmark_signature, temporal_resample  # noqa: E402
+from src.vision.hand_tracker import select_continuous_hand, select_two_hand_slots  # noqa: E402
+from src.recognition.session import CaptureState, LandmarkClipRecorder  # noqa: E402
+from src.recognition.model import load_label_map, load_sign_model  # noqa: E402
+from src.recognition.continuous import SentenceResult, SignDetection  # noqa: E402
+from src.recognition.predict_live import (  # noqa: E402
     SegmentPrediction,
     SegmentPredictionBuffer,
     write_godot_output,
 )
-from runtime_config import LiveRecognitionConfig, load_runtime_config, save_runtime_config  # noqa: E402
-from segment_prediction import top_model_predictions  # noqa: E402
+from src.config.runtime import LiveRecognitionConfig, load_runtime_config, save_runtime_config  # noqa: E402
+from src.recognition.segments import top_model_predictions  # noqa: E402
 
 
 def hand_frame(value: float = 1.0) -> np.ndarray:

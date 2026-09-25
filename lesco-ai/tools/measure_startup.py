@@ -30,7 +30,7 @@ def result_path() -> Path:
 
 def pythonpath_env(root: Path) -> dict[str, str]:
     env = os.environ.copy()
-    src_path = str(root / "src")
+    src_path = str(root)
     current = env.get("PYTHONPATH", "")
     env["PYTHONPATH"] = src_path if not current else os.pathsep.join([src_path, current])
     return env
@@ -159,8 +159,8 @@ class FirstFrameShown(RuntimeError):
 start = time.perf_counter()
 
 import cv2
-import predict_live
-from runtime_config import default_config_path, load_runtime_config, apply_arg_overrides
+from src.recognition import predict_live
+from src.config.runtime import default_config_path, load_runtime_config, apply_arg_overrides
 
 original_imshow = cv2.imshow
 original_imwrite = cv2.imwrite
@@ -225,7 +225,7 @@ print("{module_name} import seconds", f"{{time.perf_counter() - start:.6f}}")
 def snippet_load_model() -> str:
     return r'''
 import time
-from model_utils import load_sign_model
+from src.recognition.model import load_sign_model
 start = time.perf_counter()
 model = load_sign_model()
 print("load_sign_model seconds", f"{time.perf_counter() - start:.6f}")
@@ -236,7 +236,7 @@ print("input_shape", model.input_shape)
 def snippet_build_prototypes() -> str:
     return r'''
 import time
-from continuous_recognition import PrototypeLibrary
+from src.recognition.continuous import PrototypeLibrary
 start = time.perf_counter()
 prototypes = PrototypeLibrary.from_dataset()
 print("PrototypeLibrary.from_dataset seconds", f"{time.perf_counter() - start:.6f}")
@@ -248,8 +248,8 @@ print("static_labels", len(prototypes.static_prototypes))
 def snippet_hand_tracker() -> str:
     return r'''
 import time
-from config import MAX_NUM_HANDS, MIN_DETECTION_CONFIDENCE, MIN_TRACKING_CONFIDENCE
-from hand_tracker import HandTracker
+from src.config.constants import MAX_NUM_HANDS, MIN_DETECTION_CONFIDENCE, MIN_TRACKING_CONFIDENCE
+from src.vision.hand_tracker import HandTracker
 start = time.perf_counter()
 tracker = HandTracker(
     max_num_hands=MAX_NUM_HANDS,
@@ -265,7 +265,7 @@ def snippet_camera_first_frame() -> str:
     return r'''
 import time
 import cv2
-from config import CAMERA_INDEX, FRAME_HEIGHT, FRAME_WIDTH
+from src.config.constants import CAMERA_INDEX, FRAME_HEIGHT, FRAME_WIDTH
 start = time.perf_counter()
 cap = cv2.VideoCapture(CAMERA_INDEX)
 try:
@@ -290,10 +290,10 @@ import argparse
 from pathlib import Path
 import tempfile
 import time
-from config import MAX_NUM_HANDS, MIN_DETECTION_CONFIDENCE, MIN_TRACKING_CONFIDENCE
-from hand_tracker import HandTracker
-from live_session import LiveRecognitionSession
-from runtime_config import default_config_path, load_runtime_config, apply_arg_overrides
+from src.config.constants import MAX_NUM_HANDS, MIN_DETECTION_CONFIDENCE, MIN_TRACKING_CONFIDENCE
+from src.vision.hand_tracker import HandTracker
+from src.recognition.session import LiveRecognitionSession
+from src.config.runtime import DEFAULT_FPS, default_config_path, load_runtime_config, apply_arg_overrides
 
 args = argparse.Namespace(
     input_npy=None,
@@ -322,7 +322,7 @@ with tempfile.TemporaryDirectory() as tmpdir:
             output_frame_path=bridge_dir / "frame.jpg",
             debug_response_path=bridge_dir / "debug_response.txt",
             tracker=tracker,
-            fps=30.0,
+            fps=DEFAULT_FPS,
             project_root=root,
             result_printer=None,
         )
@@ -362,15 +362,15 @@ def main() -> None:
         tests = [
             ("Importar TensorFlow", python_command(sys.executable, snippet_import("tensorflow"))),
             ("Importar MediaPipe", python_command(sys.executable, snippet_import("mediapipe"))),
-            ("Importar predict_live", python_command(sys.executable, snippet_import("predict_live"))),
+            ("Importar predict_live", python_command(sys.executable, snippet_import("src.recognition.predict_live"))),
             ("Cargar modelo .keras", python_command(sys.executable, snippet_load_model())),
             ("Construir PrototypeLibrary.from_dataset()", python_command(sys.executable, snippet_build_prototypes())),
             ("Crear y cerrar HandTracker", python_command(sys.executable, snippet_hand_tracker())),
             ("Abrir camara y obtener primer frame", python_command(sys.executable, snippet_camera_first_frame())),
             ("Crear componentes LiveRecognitionSession", python_command(sys.executable, snippet_create_session())),
             (
-                'Importtime de "import predict_live"',
-                [sys.executable, "-X", "importtime", "-c", "import predict_live"],
+                'Importtime de "import src.recognition.predict_live"',
+                [sys.executable, "-X", "importtime", "-c", "import src.recognition.predict_live"],
             ),
         ]
 

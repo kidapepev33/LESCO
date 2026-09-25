@@ -1,4 +1,2 @@
-Oración: DORMIR
-Score visual: 0.998
-Detecciones:
-DORMIR conf=0.998 frames=1-8 support=1
+Oración: 
+Estado: WAITING
