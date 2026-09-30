@@ -1,6 +1,6 @@
 .interpreter-grid {
     display: grid;
-    grid-template-columns: minmax(0, 1.35fr) minmax(330px, .75fr);
+    grid-template-columns: minmax(0, 1.35fr) minmax(330px, 1fr);
     gap: 24px
 }
 
@@ -34,7 +34,7 @@
 
 .camera-frame {
     position: relative;
-    aspect-ratio: 5/3;
+    aspect-ratio: 4/3;
     display: grid;
     place-items: center;
     overflow: hidden;
@@ -145,7 +145,7 @@
 #sign {
     overflow-wrap: anywhere;
     color: var(--light-gold);
-    font: clamp(40px, 7vw, 50px)/1.05 "Playfair Display", Georgia, serif
+    font: clamp(40px, 7vw, 50px)/1.05  "Playfair Display", Georgia, serif
 }
 
 #confidence {

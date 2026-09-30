@@ -31,7 +31,7 @@ if (sign) {
       const result = await response.json();
       sign.textContent = result['seña'] || '—';
       confidence.textContent = result.confianza === null || result.confianza === undefined
-        ? 'Esperando una seña…'
+        ? (result.estado === 'WAITING' ? 'Esperando seña' : 'Esperando una seña…')
         : `Confianza: ${(result.confianza * 100).toFixed(1)}%`;
       status.textContent = 'Conectado';
       connection.dataset.state = 'connected';
@@ -54,4 +54,43 @@ if (sign) {
 
   updateResult();
   setInterval(updateResult, 500);
+}
+
+const translationForm = document.querySelector('#translation-form');
+if (translationForm) {
+  const textInput = document.querySelector('#translation-text');
+  const translationStatus = document.querySelector('#translation-status');
+  const submitButton = translationForm.querySelector('button[type="submit"]');
+  const signVideo = document.querySelector('#sign-video');
+
+  signVideo?.addEventListener('load', () => {
+    signVideo.closest('.sign-video-frame')?.classList.add('has-frame');
+  });
+
+  translationForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const text = textInput.value.trim();
+    if (!text) {
+      translationStatus.textContent = 'Escribe una seña para reproducir.';
+      textInput.focus();
+      return;
+    }
+
+    submitButton.disabled = true;
+    translationStatus.textContent = 'Buscando video…';
+    try {
+      const response = await fetch('/texto-a-lesco/solicitar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ texto: text }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || `HTTP ${response.status}`);
+      translationStatus.textContent = `Reproduciendo: ${result.texto}`;
+    } catch (error) {
+      translationStatus.textContent = error.message || 'No se pudo solicitar el video.';
+    } finally {
+      submitButton.disabled = false;
+    }
+  });
 }

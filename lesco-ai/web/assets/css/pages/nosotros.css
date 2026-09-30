@@ -1,10 +1,224 @@
-.text-panel p {
-    margin: 0;
-    font: clamp(22px, 2.5vw, 32px)/1.55 "Playfair Display", serif
+.about-page {
+    padding-bottom: 40px
 }
 
-.text-panel p+p {
-    margin-top: 26px;
+.about-heading {
+    max-width: none;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 32px
+}
+
+.about-heading>div {
+    max-width: 760px
+}
+
+.about-heading>img {
+    width: min(36vw, 390px);
+    max-height: 150px;
+    object-fit: contain;
+    object-position: right center
+}
+
+.about-card {
+    padding: clamp(22px, 3vw, 34px);
+    border: 1px solid var(--line);
+    border-radius: 22px;
+    background: #09231cb8;
+    box-shadow: 0 22px 70px #0003
+}
+
+.about-introduction {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 18px
+}
+
+.about-index,
+.about-section-heading>span {
+    margin: 0;
+    color: var(--gold);
+    font: 500 30px/1 "Playfair Display", serif
+}
+
+.about-card h2 {
+    margin: 0;
+    color: var(--light-gold);
+    font: 500 clamp(28px, 3vw, 42px)/1.1 "Playfair Display", Georgia, serif
+}
+
+.about-introduction div>p {
+    max-width: 1050px;
+    margin: 14px 0 0;
+    font: clamp(20px, 2.2vw, 29px)/1.5 "Playfair Display", Georgia, serif
+}
+
+.about-section {
+    margin-top: 28px;
+    padding-top: 15px;
+    border-top: 1px solid var(--line)
+}
+
+.about-section-heading {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    margin-bottom: 22px
+}
+
+.about-section-heading h2 {
+    font-size: clamp(26px, 2.6vw, 36px)
+}
+
+.about-section-heading p {
+    margin: 5px 0 0;
     color: var(--muted);
-    font: 17px/1.6 "DM Sans", sans-serif
+    font-size: 13px
+}
+
+.developer-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px
+}
+
+.developer-card {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    padding: 20px 24px;
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    background: #020d0a80
+}
+
+.person-icon {
+    position: relative;
+    width: 54px;
+    height: 54px;
+    flex: 0 0 54px;
+    display: grid;
+    place-items: center;
+    border: 1px solid var(--gold);
+    border-radius: 50%;
+    color: var(--light-gold)
+}
+
+.person-icon:before {
+    content: "";
+    position: absolute;
+    top: 10px;
+    width: 12px;
+    height: 12px;
+    border: 3px solid currentColor;
+    border-radius: 50%
+}
+
+.person-icon:after {
+    content: "";
+    position: absolute;
+    bottom: 9px;
+    width: 27px;
+    height: 13px;
+    border: 3px solid currentColor;
+    border-radius: 15px 15px 4px 4px
+}
+
+.developer-card h3 {
+    margin: 0 0 6px;
+    color: var(--light-gold);
+    font: 500 clamp(19px, 2vw, 25px)/1.2 "Playfair Display", Georgia, serif
+}
+
+.developer-card a {
+    display: block;
+    overflow-wrap: anywhere;
+    color: var(--muted);
+    font-size: 14px;
+    text-decoration: none
+}
+
+.developer-card a:hover {
+    color: var(--cream);
+    text-decoration: underline
+}
+
+.project-facts {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 16px;
+    margin: 0
+}
+
+.project-facts>div {
+    min-width: 0;
+    padding: 18px;
+    border-left: 1px solid var(--line)
+}
+
+.project-facts dt {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--light-gold);
+    font-weight: 600
+}
+
+.project-facts dt span {
+    font-size: 24px
+}
+
+.project-facts dd {
+    margin: 8px 0 0 32px;
+    color: var(--muted);
+    line-height: 1.5
+}
+
+@media(max-width:1120px) {
+    .developer-grid,
+    .project-facts {
+        grid-template-columns: repeat(2, minmax(0, 1fr))
+    }
+}
+
+@media(max-width:820px) {
+    .about-heading>img {
+        width: min(38vw, 280px)
+    }
+
+    .developer-grid {
+        grid-template-columns: 1fr
+    }
+}
+
+@media(max-width:560px) {
+    .about-heading {
+        align-items: flex-start;
+        flex-direction: column
+    }
+
+    .about-heading>img {
+        width: min(100%, 310px);
+        max-height: 110px;
+        object-position: left center
+    }
+
+    .about-introduction {
+        grid-template-columns: 1fr
+    }
+
+    .about-index {
+        font-size: 24px
+    }
+
+    .developer-card {
+        align-items: flex-start;
+        padding: 18px
+    }
+
+    .project-facts {
+        grid-template-columns: 1fr
+    }
 }

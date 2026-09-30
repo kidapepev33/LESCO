@@ -60,7 +60,7 @@ code {
 }
 
 .feature-page {
-    padding: clamp(30px, 7vw, 40px) clamp(40px, 7vw, 60px) 0;
+    padding: clamp(20px, 7vw, 25px) clamp(40px, 7vw, 95px) 0;
 }
 
 .section-heading {

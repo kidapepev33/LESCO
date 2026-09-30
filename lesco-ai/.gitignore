@@ -8,3 +8,4 @@ godot_bridge/output.txt
 
 models/*.keras
 models/label_map*.json
+models/prototype_library.npz

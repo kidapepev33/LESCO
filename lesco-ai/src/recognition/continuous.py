@@ -3,16 +3,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from pathlib import Path
-from typing import Iterable, Sequence
+from typing import TYPE_CHECKING, Iterable, Sequence
 
 import numpy as np
-from tensorflow import keras
 
 from src.config.runtime import MIN_CONFIDENCE, WINDOW_STRIDE
-from src.data.dataset import get_default_dataset_dir
 from src.recognition.grouping import (
-    EPSILON,
     SAME_WORD_CENTER_DISTANCE_FACTOR,
     SAME_WORD_CHAIN_START_FACTOR,
     SAME_WORD_IOU_THRESHOLD,
@@ -31,8 +27,12 @@ from src.recognition.grouping import (
     static_signature_for_range,
     temporal_center,
 )
-from src.vision.features import SEQUENCE_LENGTH, extract_landmark_features, static_landmark_signature, validate_raw_sequence
-from src.recognition.model import load_label_map, load_sign_model
+from src.recognition.prototypes import PrototypeLibrary
+from src.vision.features import SEQUENCE_LENGTH, extract_landmark_features, validate_raw_sequence
+
+if TYPE_CHECKING:
+    from tensorflow import keras
+
 
 @dataclass(frozen=True)
 class SentenceResult:
@@ -91,88 +91,6 @@ def predict_windows(
                 )
             )
     return predictions
-
-
-class PrototypeLibrary:
-    """Class prototypes used for final visual validation."""
-
-    def __init__(
-        self,
-        prototypes: dict[str, np.ndarray],
-        radii: dict[str, float],
-        static_prototypes: dict[str, np.ndarray] | None = None,
-        static_radii: dict[str, float] | None = None,
-    ) -> None:
-        self.prototypes = prototypes
-        self.radii = radii
-        self.static_prototypes = static_prototypes if static_prototypes is not None else {}
-        self.static_radii = static_radii if static_radii is not None else {}
-
-    @classmethod
-    def from_dataset(cls, dataset_dir: Path | None = None) -> "PrototypeLibrary":
-        if dataset_dir is None:
-            dataset_dir = get_default_dataset_dir()
-
-        prototypes: dict[str, np.ndarray] = {}
-        radii: dict[str, float] = {}
-        static_prototypes: dict[str, np.ndarray] = {}
-        static_radii: dict[str, float] = {}
-        for label_dir in sorted(Path(dataset_dir).iterdir()):
-            if not label_dir.is_dir():
-                continue
-
-            features = []
-            static_features = []
-            for sample_file in sorted(label_dir.glob("sample_*.npy")):
-                sample = np.load(sample_file)
-                features.append(extract_landmark_features(sample))
-                static_window = sample[-min(5, len(sample)) :]
-                signature = static_landmark_signature(static_window)
-                if bool(signature["accepted"]):
-                    static_features.append(np.asarray(signature["vector"], dtype=np.float32))
-            if not features:
-                continue
-
-            stacked = np.asarray(features, dtype=np.float32)
-            prototype = np.mean(stacked, axis=0).astype(np.float32)
-            distances = np.linalg.norm((stacked - prototype).reshape(len(stacked), -1), axis=1)
-            prototypes[label_dir.name] = prototype
-            radii[label_dir.name] = max(float(np.percentile(distances, 75)), EPSILON)
-
-            if static_features:
-                static_stacked = np.asarray(static_features, dtype=np.float32)
-                static_prototype = np.mean(static_stacked, axis=0).astype(np.float32)
-                static_distances = np.linalg.norm(static_stacked - static_prototype, axis=1)
-                static_prototypes[label_dir.name] = static_prototype
-                static_radii[label_dir.name] = max(float(np.percentile(static_distances, 75)), EPSILON)
-
-        return cls(
-            prototypes=prototypes,
-            radii=radii,
-            static_prototypes=static_prototypes,
-            static_radii=static_radii,
-        )
-
-    def score(self, word: str, feature: np.ndarray) -> float:
-        """Return a bounded visual compatibility score in ``(0, 1]``."""
-        prototype = self.prototypes.get(word)
-        if prototype is None:
-            return 0.0
-        radius = self.radii[word]
-        distance = float(np.linalg.norm((feature - prototype).reshape(-1)))
-        return float(np.exp(-distance / (radius + EPSILON)))
-
-    def static_score(self, word: str, signature: dict[str, object] | None) -> float | None:
-        """Return static landmark compatibility, or ``None`` when unavailable."""
-        if signature is None or not bool(signature.get("accepted", False)):
-            return None
-        prototype = self.static_prototypes.get(word)
-        if prototype is None:
-            return None
-        radius = self.static_radii[word]
-        vector = np.asarray(signature["vector"], dtype=np.float32)
-        distance = float(np.linalg.norm(vector - prototype))
-        return float(np.exp(-distance / (radius + EPSILON)))
 
 
 class SentenceBuilder:
@@ -379,8 +297,16 @@ class ContinuousRecognizer:
         prototypes: PrototypeLibrary | None = None,
         builder: SentenceBuilder | None = None,
     ) -> None:
-        self.model = model if model is not None else load_sign_model()
-        self.index_to_label = index_to_label if index_to_label is not None else load_label_map()
+        if model is None:
+            from src.recognition.model import load_sign_model
+
+            model = load_sign_model()
+        if index_to_label is None:
+            from src.recognition.model import load_label_map
+
+            index_to_label = load_label_map()
+        self.model = model
+        self.index_to_label = index_to_label
         self.prototypes = prototypes
         self.builder = builder if builder is not None else SentenceBuilder()
 

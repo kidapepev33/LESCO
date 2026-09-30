@@ -2,20 +2,24 @@
 
 from __future__ import annotations
 
+import os
+from pathlib import Path
 import re
 import time
-from pathlib import Path
 
-from flask import Flask, Response, jsonify, make_response, send_file, send_from_directory
+from flask import Flask, Response, jsonify, make_response, request, send_file, send_from_directory
 
 
 WEB_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = WEB_DIR.parent
 DEFAULT_RESULT_PATH = PROJECT_ROOT / "godot_bridge" / "output.txt"
 DEFAULT_FRAME_PATH = PROJECT_ROOT / "godot_bridge" / "frame.jpg"
+DEFAULT_SIGN_INPUT_PATH = PROJECT_ROOT / "godot_bridge" / "sign_video_input.txt"
+DEFAULT_SIGN_FRAME_PATH = PROJECT_ROOT / "godot_bridge" / "sign_video_frame.jpg"
 
-SENTENCE_PATTERN = re.compile(r"^Oración:\s*(.*)$", re.MULTILINE)
+SENTENCE_PATTERN = re.compile(r"^Oración:[ \t]*(.*)$", re.MULTILINE)
 CONFIDENCE_PATTERN = re.compile(r"^Score visual:\s*([0-9]+(?:\.[0-9]+)?)\s*$", re.MULTILINE)
+STATUS_PATTERN = re.compile(r"^Estado:\s*(.*)$", re.MULTILINE)
 MJPEG_BOUNDARY = b"frame"
 
 
@@ -66,16 +70,23 @@ def read_current_result(result_path: Path = DEFAULT_RESULT_PATH) -> dict[str, st
     try:
         contents = result_path.read_text(encoding="utf-8")
     except (FileNotFoundError, OSError, UnicodeError):
-        return {"seña": "", "confianza": None}
+        return {"seña": "", "confianza": None, "estado": ""}
 
     sentence_match = SENTENCE_PATTERN.search(contents)
     confidence_match = CONFIDENCE_PATTERN.search(contents)
+    status_match = STATUS_PATTERN.search(contents)
     sentence = sentence_match.group(1).strip() if sentence_match else ""
     confidence = float(confidence_match.group(1)) if confidence_match else None
-    return {"seña": sentence, "confianza": confidence}
+    status = status_match.group(1).strip() if status_match else ""
+    return {"seña": sentence, "confianza": confidence, "estado": status}
 
 
-def create_app(result_path: Path = DEFAULT_RESULT_PATH, frame_path: Path = DEFAULT_FRAME_PATH) -> Flask:
+def create_app(
+    result_path: Path = DEFAULT_RESULT_PATH,
+    frame_path: Path = DEFAULT_FRAME_PATH,
+    sign_input_path: Path = DEFAULT_SIGN_INPUT_PATH,
+    sign_frame_path: Path = DEFAULT_SIGN_FRAME_PATH,
+) -> Flask:
     """Crea la aplicación sin iniciar procesos de cámara ni de inferencia."""
     app = Flask(__name__)
 
@@ -125,6 +136,32 @@ def create_app(result_path: Path = DEFAULT_RESULT_PATH, frame_path: Path = DEFAU
     def stream():
         response = Response(
             stream_latest_frame(frame_path),
+            mimetype="multipart/x-mixed-replace; boundary=frame",
+        )
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+        return response
+
+    @app.post("/texto-a-lesco/solicitar")
+    def request_sign_video():
+        data = request.get_json(silent=True) or {}
+        text = str(data.get("texto", "")).strip()
+        if not text:
+            return jsonify({"error": "Escribe una seña para reproducir."}), 400
+
+        sign_input_path.parent.mkdir(parents=True, exist_ok=True)
+        temporary_path = sign_input_path.with_name(f".{sign_input_path.name}.tmp")
+        try:
+            temporary_path.write_text(text, encoding="utf-8")
+            os.replace(temporary_path, sign_input_path)
+        finally:
+            temporary_path.unlink(missing_ok=True)
+        return jsonify({"texto": text})
+
+    @app.get("/texto-a-lesco/stream")
+    def sign_video_stream():
+        response = Response(
+            stream_latest_frame(sign_frame_path),
             mimetype="multipart/x-mixed-replace; boundary=frame",
         )
         response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"

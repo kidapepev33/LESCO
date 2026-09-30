@@ -28,24 +28,9 @@ from src.recognition.continuous import (
     StaticSegment,
     sliding_window_ranges,
 )
-from src.diagnostics.debug_view import draw_frame, write_debug_response
 from src.vision.features import extract_landmark_features, palm_scale, static_landmark_signature
 from src.vision.hand_tracker import HandTracker, select_two_hand_slots
-from src.recognition.session import (
-    ACCELERATION_ACTIVITY_WEIGHT,
-    ONE_HAND_FRAME_SHAPE,
-    TWO_HAND_FRAME_SHAPE,
-    USE_ACCELERATION_ACTIVITY,
-    USE_STATIC_LANDMARK_SIGNATURES,
-    CaptureState,
-    LandmarkClipRecorder,
-    LiveRecognitionSession,
-    LiveSessionState,
-    RecorderStep,
-    ensure_two_hand_frame,
-    save_clip_if_needed,
-    two_hand_landmarks,
-)
+from src.recognition.session import LiveRecognitionSession
 from src.config.runtime import (
     DEFAULT_FPS,
     MAX_VALID_FPS,
