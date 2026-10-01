@@ -86,6 +86,25 @@ class FramePublicationTests(unittest.TestCase):
             self.assertEqual(output_path.read_bytes(), b"encoded-final-frame")
             self.assertFalse(output_path.with_name("frame.next.jpg").exists())
 
+    def test_temporary_frame_replace_lock_does_not_stop_recognition(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_path = Path(tmpdir) / "frame.jpg"
+            output_path.write_bytes(b"previous-frame")
+            session = object.__new__(LiveRecognitionSession)
+            session.output_frame_path = output_path
+
+            def fake_imwrite(path: str, _frame: np.ndarray) -> bool:
+                Path(path).write_bytes(b"new-frame")
+                return True
+
+            with patch("src.recognition.session.cv2.imwrite", side_effect=fake_imwrite), patch(
+                "src.recognition.session.replace_with_retry", side_effect=PermissionError("locked")
+            ):
+                session.show_frame(np.zeros((2, 2, 3), dtype=np.uint8))
+
+            self.assertEqual(output_path.read_bytes(), b"previous-frame")
+            self.assertFalse(output_path.with_name("frame.next.jpg").exists())
+
 
 class LiveSessionTests(unittest.TestCase):
     @staticmethod

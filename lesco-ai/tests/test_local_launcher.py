@@ -68,6 +68,64 @@ class LocalLauncherTests(unittest.TestCase):
             ],
         )
 
+    def test_windows_virtual_environment_python_is_selected(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            python = root / ".venv" / "Scripts" / "python.exe"
+            python.parent.mkdir(parents=True)
+            python.touch()
+            with patch.object(launcher, "WINDOWS", True), patch.object(launcher, "PROJECT_ROOT", root):
+                self.assertEqual(launcher.project_python({}), python)
+
+    def test_windows_browser_search_finds_edge_in_program_files(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            program_files = Path(tmpdir)
+            edge = program_files / "Microsoft" / "Edge" / "Application" / "msedge.exe"
+            edge.parent.mkdir(parents=True)
+            edge.touch()
+            environment = {"PROGRAMFILES": str(program_files), "PROGRAMFILES(X86)": "", "LOCALAPPDATA": ""}
+            with patch.object(launcher, "WINDOWS", True), patch.dict(launcher.os.environ, environment):
+                with patch.object(launcher.shutil, "which", return_value=None):
+                    self.assertEqual(launcher.find_browser({"browser_candidates": []}), str(edge))
+
+    def test_windows_default_profile_uses_local_app_data(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with patch.object(launcher, "WINDOWS", True), patch.dict(
+                launcher.os.environ, {"LOCALAPPDATA": tmpdir}
+            ):
+                self.assertEqual(
+                    launcher.browser_profile_dir({}),
+                    Path(tmpdir) / "Prisma" / "browser-profile",
+                )
+
+    def test_windows_process_group_flags_are_used_for_backend(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            python = root / "python.exe"
+            entry = root / "prisma.py"
+            python.touch()
+            entry.touch()
+            process = Mock()
+            with patch.object(launcher, "WINDOWS", True), patch.object(launcher, "PROJECT_ROOT", root), patch.object(
+                launcher, "LAUNCHER_DIR", root / "launcher"
+            ), patch.object(launcher, "ENTRY_POINT", entry), patch.object(
+                launcher, "project_python", return_value=python
+            ), patch.object(launcher.subprocess, "Popen", return_value=process) as popen:
+                returned, log = launcher.start_backend({})
+                log.close()
+
+        self.assertIs(returned, process)
+        self.assertEqual(popen.call_args.kwargs["creationflags"], 0x00000200)
+        self.assertNotIn("start_new_session", popen.call_args.kwargs)
+
+    def test_windows_owned_backend_receives_break_signal(self) -> None:
+        process = Mock()
+        process.poll.return_value = None
+        with patch.object(launcher, "WINDOWS", True):
+            launcher.stop_owned_backend(process)
+        process.send_signal.assert_called_once_with(getattr(launcher.signal, "CTRL_BREAK_EVENT", launcher.signal.SIGTERM))
+        process.terminate.assert_not_called()
+
     def test_installed_app_id_uses_distinct_chrome_mode(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             config = {

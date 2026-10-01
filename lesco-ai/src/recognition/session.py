@@ -12,6 +12,7 @@ import numpy as np
 
 from src.config.runtime import LiveRecognitionConfig
 from src.integration.sign_video_bridge import write_godot_output
+from src.utils.atomic_files import replace_with_retry
 from src.recognition.capture import (
     CaptureState,
     LandmarkClipRecorder,
@@ -116,7 +117,12 @@ class LiveRecognitionSession:
         shared_frame = frame.copy()
         temporary_path = self.output_frame_path.with_name(f"{self.output_frame_path.stem}.next.jpg")
         if cv2.imwrite(str(temporary_path), shared_frame):
-            temporary_path.replace(self.output_frame_path)
+            try:
+                replace_with_retry(temporary_path, self.output_frame_path)
+            except OSError:
+                # A Windows reader may briefly lock frame.jpg. Keep the last
+                # complete frame available and continue recognition.
+                temporary_path.unlink(missing_ok=True)
 
     def publish_frame(self, frame: np.ndarray) -> None:
         """Compatibilidad para consumidores que aún publican un frame procesado."""

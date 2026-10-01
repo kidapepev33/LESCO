@@ -36,6 +36,22 @@ class PrismaLauncherTests(unittest.TestCase):
             ["web/web_api.py", "src/sign_video_bridge.py", "src/predict_live.py"],
         )
         self.assertTrue(all(call.kwargs["cwd"] == ROOT for call in popen.call_args_list))
+        self.assertTrue(all(call.kwargs["start_new_session"] for call in popen.call_args_list))
+
+    def test_windows_components_use_new_process_groups(self) -> None:
+        children = [Mock(pid=101), Mock(pid=102), Mock(pid=103)]
+        with patch.object(prisma, "WINDOWS", True):
+            popen = Mock(side_effect=children)
+            prisma.start_components(popen_factory=popen)
+        self.assertTrue(all(call.kwargs["creationflags"] == 0x00000200 for call in popen.call_args_list))
+        self.assertTrue(all("start_new_session" not in call.kwargs for call in popen.call_args_list))
+
+    def test_windows_graceful_stop_sends_break_event(self) -> None:
+        process = Mock(pid=321)
+        process.poll.return_value = None
+        with patch.object(prisma, "WINDOWS", True):
+            prisma.request_graceful_stop(process)
+        process.send_signal.assert_called_once_with(getattr(prisma.signal, "CTRL_BREAK_EVENT", prisma.signal.SIGTERM))
 
     @unittest.skipIf(prisma.os.name == "nt", "La señal de grupo se prueba en sistemas POSIX.")
     def test_graceful_stop_sends_sigint_to_child_group(self) -> None:

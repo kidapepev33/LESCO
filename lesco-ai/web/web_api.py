@@ -2,17 +2,23 @@
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 import re
+import sys
 import time
+
+WEB_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = WEB_DIR.parent
+if __package__ in {None, ""}:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 from flask import Flask, Response, jsonify, make_response, request, send_file, send_from_directory
 
+from src.utils.atomic_files import replace_with_retry
+from src.utils.process_signals import install_windows_break_handler
 
-WEB_DIR = Path(__file__).resolve().parent
+
 PWA_DIR = WEB_DIR / "pwa"
-PROJECT_ROOT = WEB_DIR.parent
 DEFAULT_RESULT_PATH = PROJECT_ROOT / "godot_bridge" / "output.txt"
 DEFAULT_FRAME_PATH = PROJECT_ROOT / "godot_bridge" / "frame.jpg"
 DEFAULT_SIGN_INPUT_PATH = PROJECT_ROOT / "godot_bridge" / "sign_video_input.txt"
@@ -180,7 +186,7 @@ def create_app(
         temporary_path = sign_input_path.with_name(f".{sign_input_path.name}.tmp")
         try:
             temporary_path.write_text(text, encoding="utf-8")
-            os.replace(temporary_path, sign_input_path)
+            replace_with_retry(temporary_path, sign_input_path)
         finally:
             temporary_path.unlink(missing_ok=True)
         return jsonify({"texto": text})
@@ -202,4 +208,5 @@ app = create_app()
 
 
 if __name__ == "__main__":
+    install_windows_break_handler()
     app.run(host="127.0.0.1", port=5000, debug=False, use_reloader=False)

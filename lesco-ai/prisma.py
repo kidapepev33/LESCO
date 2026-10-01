@@ -11,10 +11,13 @@ import sys
 import time
 from typing import Callable, Sequence
 
+from src.utils.process_signals import install_windows_break_handler
+
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 GRACEFUL_TIMEOUT_SECONDS = 5.0
 TERMINATE_TIMEOUT_SECONDS = 2.0
+WINDOWS = os.name == "nt"
 
 
 @dataclass(frozen=True)
@@ -55,11 +58,12 @@ def start_components(
         for component in components:
             command = component_command(component)
             print(f"[PRISMA] Iniciando {component.name}: {' '.join(command)}", flush=True)
-            process = popen_factory(
-                command,
-                cwd=PROJECT_ROOT,
-                start_new_session=(os.name != "nt"),
+            process_options = (
+                {"creationflags": getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200)}
+                if WINDOWS
+                else {"start_new_session": True}
             )
+            process = popen_factory(command, cwd=PROJECT_ROOT, **process_options)
             processes.append((component, process))
     except Exception:
         stop_components(processes)
@@ -71,8 +75,8 @@ def request_graceful_stop(process: subprocess.Popen) -> None:
     """Solicita cierre con Ctrl+C para ejecutar los bloques finally de cada hijo."""
     if process.poll() is not None:
         return
-    if os.name == "nt":
-        process.send_signal(signal.CTRL_BREAK_EVENT)
+    if WINDOWS:
+        process.send_signal(getattr(signal, "CTRL_BREAK_EVENT", signal.SIGTERM))
     else:
         os.killpg(process.pid, signal.SIGINT)
 
@@ -87,7 +91,7 @@ def stop_components(processes: Sequence[tuple[Component, subprocess.Popen]]) -> 
     for _, process in active:
         try:
             request_graceful_stop(process)
-        except ProcessLookupError:
+        except OSError:
             pass
 
     graceful_deadline = time.monotonic() + GRACEFUL_TIMEOUT_SECONDS
@@ -118,6 +122,7 @@ def stop_components(processes: Sequence[tuple[Component, subprocess.Popen]]) -> 
 
 def run() -> int:
     """Mantiene Prisma activo mientras sus tres componentes estén saludables."""
+    install_windows_break_handler()
     processes: list[tuple[Component, subprocess.Popen]] = []
     exit_code = 0
     try:

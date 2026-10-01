@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import argparse
-import os
 from pathlib import Path
 import re
 import time
 
 from src.config.runtime import DEFAULT_FPS, MAX_VALID_FPS, MIN_VALID_FPS
+from src.utils.atomic_files import replace_with_retry
 
 POLL_INTERVAL_SECONDS = 0.05
 
@@ -55,7 +55,7 @@ def write_frame_atomic(output_path: Path, temp_path: Path, frame) -> None:
     if not success:
         raise RuntimeError("No se pudo codificar el frame como JPG.")
     temp_path.write_bytes(encoded.tobytes())
-    os.replace(temp_path, output_path)
+    replace_with_retry(temp_path, output_path)
 
 
 def write_godot_output(output_text_path: Path, result: object | None, status: str = "") -> None:
@@ -80,7 +80,7 @@ def write_godot_output(output_text_path: Path, result: object | None, status: st
     temporary_path = output_text_path.with_name(f".{output_text_path.name}.tmp")
     try:
         temporary_path.write_text(contents, encoding="utf-8")
-        os.replace(temporary_path, output_text_path)
+        replace_with_retry(temporary_path, output_text_path)
     finally:
         temporary_path.unlink(missing_ok=True)
 

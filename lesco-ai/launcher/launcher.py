@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Lanzador local de Prisma para Linux y navegadores Chromium."""
+"""Lanzador local de Prisma para Windows/Linux y navegadores Chromium."""
 
 from __future__ import annotations
 
-import fcntl
+from contextlib import contextmanager
 import hashlib
 import json
 import os
@@ -28,6 +28,7 @@ ENTRY_POINT = PROJECT_ROOT / "prisma.py"
 HEALTH_IDENTITY = {"service": "prisma", "status": "ok"}
 BROWSER_TARGET_TIMEOUT_SECONDS = 15.0
 BROWSER_TARGET_POLL_SECONDS = 0.25
+WINDOWS = os.name == "nt"
 
 
 class LauncherError(RuntimeError):
@@ -145,8 +146,19 @@ def project_python(config: dict[str, Any]) -> Path:
         candidate = Path(configured)
         return candidate if candidate.is_absolute() else PROJECT_ROOT / candidate
 
-    virtual_python = PROJECT_ROOT / ".venv" / "bin" / "python"
+    virtual_python = (
+        PROJECT_ROOT / ".venv" / "Scripts" / "python.exe"
+        if WINDOWS
+        else PROJECT_ROOT / ".venv" / "bin" / "python"
+    )
     return virtual_python if virtual_python.is_file() else Path(sys.executable)
+
+
+def new_process_group_options() -> dict[str, Any]:
+    """Return flags for an independently controllable child process."""
+    if WINDOWS:
+        return {"creationflags": getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200)}
+    return {"start_new_session": True}
 
 
 def start_backend(config: dict[str, Any]) -> tuple[subprocess.Popen, Any]:
@@ -157,7 +169,7 @@ def start_backend(config: dict[str, Any]) -> tuple[subprocess.Popen, Any]:
         raise LauncherError(f"No se encontró el punto de entrada: {ENTRY_POINT}")
 
     log_dir = LAUNCHER_DIR / "logs"
-    log_dir.mkdir(exist_ok=True)
+    log_dir.mkdir(parents=True, exist_ok=True)
     log_handle = (log_dir / "backend.log").open("a", encoding="utf-8")
     log_handle.write(f"\n[{time.strftime('%Y-%m-%d %H:%M:%S')}] Inicio solicitado por launcher.\n")
     log_handle.flush()
@@ -168,7 +180,7 @@ def start_backend(config: dict[str, Any]) -> tuple[subprocess.Popen, Any]:
             cwd=PROJECT_ROOT,
             stdout=log_handle,
             stderr=subprocess.STDOUT,
-            start_new_session=True,
+            **new_process_group_options(),
         )
     except Exception:
         log_handle.close()
@@ -180,9 +192,12 @@ def stop_owned_backend(process: subprocess.Popen) -> None:
     if process.poll() is not None:
         return
     try:
-        os.killpg(process.pid, signal.SIGINT)
+        if WINDOWS:
+            process.send_signal(getattr(signal, "CTRL_BREAK_EVENT", signal.SIGTERM))
+        else:
+            os.killpg(process.pid, signal.SIGINT)
         process.wait(timeout=8)
-    except (ProcessLookupError, subprocess.TimeoutExpired):
+    except (OSError, subprocess.TimeoutExpired):
         if process.poll() is None:
             process.terminate()
             try:
@@ -221,7 +236,27 @@ def find_browser(config: dict[str, Any]) -> str:
         resolved = shutil.which(candidate)
         if resolved:
             return resolved
-    raise LauncherError("No se encontró Chrome/Chromium. Ajusta browser_executable en config.json.")
+    if WINDOWS:
+        for executable in ("chrome.exe", "msedge.exe"):
+            resolved = shutil.which(executable)
+            if resolved:
+                return resolved
+        roots = (
+            os.environ.get("PROGRAMFILES"),
+            os.environ.get("PROGRAMFILES(X86)"),
+            os.environ.get("LOCALAPPDATA"),
+        )
+        suffixes = (
+            Path("Google/Chrome/Application/chrome.exe"),
+            Path("Microsoft/Edge/Application/msedge.exe"),
+        )
+        for root in roots:
+            if root:
+                for suffix in suffixes:
+                    candidate = Path(root) / suffix
+                    if candidate.is_file():
+                        return str(candidate)
+    raise LauncherError("No se encontró Chrome, Chromium o Edge. Ajusta browser_executable en config.json.")
 
 
 def browser_profile_dir(config: dict[str, Any]) -> Path:
@@ -229,6 +264,10 @@ def browser_profile_dir(config: dict[str, Any]) -> Path:
     if configured:
         path = Path(configured).expanduser()
         return path if path.is_absolute() else PROJECT_ROOT / path
+    if WINDOWS:
+        local_app_data = os.environ.get("LOCALAPPDATA")
+        state_home = Path(local_app_data) if local_app_data else Path.home() / "AppData" / "Local"
+        return state_home / "Prisma" / "browser-profile"
     state_home = Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local/state"))
     return state_home / "prisma" / "browser-profile"
 
@@ -253,16 +292,45 @@ def open_prisma_window(config: dict[str, Any]) -> tuple[BrowserSession, str]:
     else:
         command.append(f"--app={config['base_url']}")
         mode = "ventana Chrome en modo aplicación (respaldo; no verifica instalación PWA)"
-    process = subprocess.Popen(command, start_new_session=True)
+    process = subprocess.Popen(command, **new_process_group_options())
     return BrowserSession(process, profile_dir, str(config["base_url"])), mode
 
 
+@contextmanager
 def launcher_lock():
+    """Hold one launcher instance per project on Windows and POSIX."""
     digest = hashlib.sha256(str(PROJECT_ROOT).encode("utf-8")).hexdigest()[:12]
     path = Path(tempfile.gettempdir()) / f"prisma-launcher-{digest}.lock"
-    handle = path.open("w", encoding="utf-8")
-    fcntl.flock(handle, fcntl.LOCK_EX)
-    return handle
+    handle = path.open("a+b")
+    try:
+        if WINDOWS:
+            import msvcrt
+
+            handle.seek(0)
+            if handle.read(1) == b"":
+                handle.write(b"0")
+                handle.flush()
+            handle.seek(0)
+            msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)
+        else:
+            import fcntl
+
+            fcntl.flock(handle, fcntl.LOCK_EX)
+        yield handle
+    finally:
+        if WINDOWS:
+            import msvcrt
+
+            handle.seek(0)
+            try:
+                msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+            except OSError:
+                pass
+        else:
+            import fcntl
+
+            fcntl.flock(handle, fcntl.LOCK_UN)
+        handle.close()
 
 
 def run() -> int:

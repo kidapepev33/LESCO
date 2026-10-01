@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from src.utils.atomic_files import write_text_atomic
+
 
 def write_debug_response(
     debug_path: Path,
@@ -34,4 +36,4 @@ def write_debug_response(
     lines.append("" if final_result is None else final_result.sentence)
 
     debug_path.parent.mkdir(parents=True, exist_ok=True)
-    debug_path.write_text("\n".join(lines), encoding="utf-8")
+    write_text_atomic(debug_path, "\n".join(lines))
