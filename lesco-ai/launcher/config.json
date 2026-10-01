@@ -1,0 +1,15 @@
+{
+  "app_name": "Prisma",
+  "base_url": "http://127.0.0.1:5000",
+  "auto_start_backend": true,
+  "stop_backend_on_exit": true,
+  "backend_start_timeout_seconds": 45,
+  "fullscreen": false,
+  "browser_profile_dir": "",
+  "installed_app_id": "",
+  "browser_candidates": [
+    "google-chrome",
+    "chromium",
+    "chromium-browser"
+  ]
+}

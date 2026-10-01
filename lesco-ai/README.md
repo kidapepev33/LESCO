@@ -94,6 +94,29 @@ python prisma.py
 `Ctrl+C` solicita primero un cierre ordenado de los tres procesos. Los comandos
 individuales indicados abajo se conservan para depuración y mantenimiento.
 
+### PWA y acceso directo local
+
+Con Prisma activo en `http://127.0.0.1:5000`, Chrome puede instalar la PWA desde
+su menú. La interfaz usa red primero y conserva un respaldo offline; los streams
+y resultados en vivo nunca se sirven desde caché.
+
+El lanzador separado comprueba Flask, inicia `prisma.py` cuando corresponde y
+abre una ventana independiente:
+
+```bash
+./launcher/run_prisma.sh
+```
+
+Para instalar el acceso directo de Linux:
+
+```bash
+.venv/bin/python launcher/install_shortcut.py
+```
+
+Las opciones provisionales están en `launcher/config.json`. La identidad y la
+política de caché están documentadas en `web/pwa/README.md`; el funcionamiento
+del lanzador se detalla en `launcher/README.md`.
+
 ```bash
 python -m src.data.train_model
 python src/predict_live.py

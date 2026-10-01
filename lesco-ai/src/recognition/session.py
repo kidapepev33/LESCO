@@ -10,8 +10,7 @@ import time
 import cv2
 import numpy as np
 
-from src.config.editor import open_config_editor
-from src.config.runtime import LiveRecognitionConfig, apply_arg_overrides, default_config_path, load_runtime_config
+from src.config.runtime import LiveRecognitionConfig
 from src.integration.sign_video_bridge import write_godot_output
 from src.recognition.capture import (
     CaptureState,
@@ -54,7 +53,6 @@ class LiveRecognitionSession:
     recognizer: ContinuousRecognizer
     recorder: LandmarkClipRecorder
     segment_buffer: SegmentPredictionBuffer
-    project_root: Path
     result_printer: Callable[[SentenceResult, float | None], None] | None = None
     state: LiveSessionState = field(default_factory=LiveSessionState)
 
@@ -68,7 +66,6 @@ class LiveRecognitionSession:
         debug_response_path: Path,
         tracker: HandTracker,
         fps: float,
-        project_root: Path,
         result_printer: Callable[[SentenceResult, float | None], None] | None = None,
     ) -> "LiveRecognitionSession":
         recognizer = ContinuousRecognizer()
@@ -84,7 +81,6 @@ class LiveRecognitionSession:
             recognizer=recognizer,
             recorder=recorder,
             segment_buffer=segment_buffer,
-            project_root=project_root,
             result_printer=result_printer,
         )
         session.initialize_outputs()
@@ -116,8 +112,7 @@ class LiveRecognitionSession:
         return frame
 
     def show_frame(self, frame: np.ndarray) -> None:
-        """Muestra y comparte exactamente el mismo frame procesado."""
-        cv2.imshow("LESCO-AI | Reconocimiento continuo", frame)
+        """Publica atómicamente el frame procesado para la interfaz web."""
         shared_frame = frame.copy()
         temporary_path = self.output_frame_path.with_name(f"{self.output_frame_path.stem}.next.jpg")
         if cv2.imwrite(str(temporary_path), shared_frame):
@@ -126,18 +121,6 @@ class LiveRecognitionSession:
     def publish_frame(self, frame: np.ndarray) -> None:
         """Compatibilidad para consumidores que aún publican un frame procesado."""
         self.show_frame(frame)
-
-    def handle_key(self, key: int) -> bool:
-        if key == ord("q"):
-            return False
-        if key == ord("c") and self.recorder.state == CaptureState.WAITING:
-            config_path = default_config_path(self.project_root)
-            open_config_editor(config_path)
-            config = load_runtime_config(config_path)
-            self.config = apply_arg_overrides(config, self.args)
-            self.recorder.config = self.config
-            self.segment_buffer.config = self.config
-        return True
 
     def _handle_hands_returned(self, landmarks: np.ndarray | None) -> None:
         if self.state.last_sentence_status and landmarks is not None:
@@ -149,7 +132,6 @@ class LiveRecognitionSession:
     def _classify_finalized_segment(self, frame: np.ndarray, step: RecorderStep) -> np.ndarray:
         frame = self.draw(frame)
         self.show_frame(frame)
-        cv2.waitKey(1)
 
         save_clip_if_needed(step.finalized_clip, self.config, self.args.save_clip)
         start = time.perf_counter()

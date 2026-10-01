@@ -8,9 +8,13 @@
     padding: 30px
 }
 
+.help-grid article {
+    color: var(--green)
+}
+
 .help-grid b {
     color: var(--gold);
-    font: 500 44px "Playfair Display", serif
+    font: 600 36px Arial, "DM Sans", system-ui, sans-serif
 }
 
 .help-grid h2 {
@@ -20,8 +24,12 @@
 
 .help-grid p {
     margin: 0;
-    color: var(--muted);
+    color: var(--green);
     line-height: 1.6
+}
+
+.help-grid code {
+    color: var(--gold)
 }
 
 @media(max-width:980px) {

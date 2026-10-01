@@ -7,15 +7,34 @@
     flex-direction: column;
     align-items: center;
     padding: 20px 25px 20px;
-    background: linear-gradient(#071e18, #041710);
-    border-right: 1px solid var(--line);
-    box-shadow: 14px 0 45px #0004
+    background: var(--green);
+    border-right: 0;
+    box-shadow: none
+}
+
+.sidebar:before {
+    content: "";
+    position: absolute;
+    inset: 36px 23px 20px;
+    z-index: -1;
+    border: 2px solid #FFFFFF;
+    border-radius: 34px;
+    pointer-events: none
 }
 
 .brand {
+    position: relative;
+    z-index: 1;
     margin-top: 1rem;
-    width: 210px;
+    width: 100%;
+    overflow: hidden;
+    border-radius: 34px 34px 0 34px;
+    background: var(--panel);
     transition: transform .18s
+}
+
+.brand img {
+    width: 100%
 }
 
 .brand:hover {
@@ -38,22 +57,23 @@
     gap: 12px;
     padding: 8px 15px;
     border-radius: 12px;
-    color: #d9d5c9;
+    color: #FFFFFF;
     font-weight: 600;
     text-decoration: none;
     transition: .16s
 }
 
 .nav-link:hover {
-    color: var(--light-gold);
-    background: #e8af3c14;
-    transform: translateX(3px)
+    color: #FFFFFF;
+    transform: translateX(25px)
 }
 
 .nav-link.is-active {
-    color: #1b1b12;
-    background: linear-gradient(135deg, #f7d77d, var(--gold));
-    box-shadow: 0 10px 25px #e8af3c2b
+    width: calc(100% - 20px);
+    justify-self: center;
+    color: #FFFFFF;
+    background: var(--gold);
+    box-shadow: 0 10px 25px #0003
 }
 
 .nav-link b {
@@ -61,14 +81,16 @@
     height: 32px;
     display: grid;
     place-items: center;
-    border: 1px solid;
+    border: 0;
     border-radius: 50%;
+    background: #FFFFFF;
+    color: var(--green);
     font-size: 20px
 }
 
 .sidebar-note {
     margin: 0;
-    color: #718b80;
+    color: #FFFFFF;
     font-size: 12px;
     line-height: 1.6;
     letter-spacing: .08em;
@@ -97,8 +119,8 @@
         align-items: center;
         justify-content: space-between;
         padding: 0 20px;
-        background: #041711ed;
-        border-bottom: 1px solid var(--line);
+        background: var(--green);
+        border-bottom: 2px solid #FFFFFF;
         backdrop-filter: blur(14px)
     }
 
@@ -124,7 +146,7 @@
         width: 24px;
         height: 2px;
         margin: auto;
-        background: var(--cream);
+        background: #FFFFFF;
         transition: .18s
     }
 
@@ -145,6 +167,10 @@
         padding-top: 88px;
         transform: translateX(-105%);
         transition: transform .22s
+    }
+
+    .sidebar:before {
+        display: none
     }
 
     .menu-open {

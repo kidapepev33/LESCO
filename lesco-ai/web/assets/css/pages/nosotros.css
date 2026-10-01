@@ -7,7 +7,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 32px
+
 }
 
 .about-heading>div {
@@ -15,18 +15,20 @@
 }
 
 .about-heading>img {
+    order: -1;
     width: min(36vw, 390px);
     max-height: 150px;
     object-fit: contain;
-    object-position: right center
+    object-position: left center
 }
 
 .about-card {
     padding: clamp(22px, 3vw, 34px);
-    border: 1px solid var(--line);
-    border-radius: 22px;
-    background: #09231cb8;
-    box-shadow: 0 22px 70px #0003
+    border: 2px solid var(--line);
+    border-radius: 18px;
+    background: var(--panel);
+    color: var(--green);
+    box-shadow: none
 }
 
 .about-introduction {
@@ -39,19 +41,19 @@
 .about-section-heading>span {
     margin: 0;
     color: var(--gold);
-    font: 500 30px/1 "Playfair Display", serif
+    font: 600 36px/1 Arial, "DM Sans", system-ui, sans-serif
 }
 
 .about-card h2 {
     margin: 0;
-    color: var(--light-gold);
-    font: 500 clamp(28px, 3vw, 42px)/1.1 "Playfair Display", Georgia, serif
+    color: var(--green);
+    font: 500 clamp(28px, 3vw, 42px)/1.1 Arial, "DM Sans", system-ui, sans-serif
 }
 
 .about-introduction div>p {
     max-width: 1050px;
     margin: 14px 0 0;
-    font: clamp(20px, 2.2vw, 29px)/1.5 "Playfair Display", Georgia, serif
+    font: clamp(20px, 2.2vw, 29px)/1.5 Arial, "DM Sans", system-ui, sans-serif
 }
 
 .about-section {
@@ -73,7 +75,7 @@
 
 .about-section-heading p {
     margin: 5px 0 0;
-    color: var(--muted);
+    color: var(--green);
     font-size: 13px
 }
 
@@ -91,7 +93,7 @@
     padding: 20px 24px;
     border: 1px solid var(--line);
     border-radius: 18px;
-    background: #020d0a80
+    background: var(--panel)
 }
 
 .person-icon {
@@ -101,9 +103,9 @@
     flex: 0 0 54px;
     display: grid;
     place-items: center;
-    border: 1px solid var(--gold);
+    border: 1px solid var(--line);
     border-radius: 50%;
-    color: var(--light-gold)
+    color: var(--gold)
 }
 
 .person-icon:before {
@@ -112,7 +114,7 @@
     top: 10px;
     width: 12px;
     height: 12px;
-    border: 3px solid currentColor;
+    border: 2px solid currentColor;
     border-radius: 50%
 }
 
@@ -122,26 +124,26 @@
     bottom: 9px;
     width: 27px;
     height: 13px;
-    border: 3px solid currentColor;
+    border: 2px solid currentColor;
     border-radius: 15px 15px 4px 4px
 }
 
 .developer-card h3 {
     margin: 0 0 6px;
-    color: var(--light-gold);
-    font: 500 clamp(19px, 2vw, 25px)/1.2 "Playfair Display", Georgia, serif
+    color: var(--green);
+    font: 500 clamp(19px, 2vw, 25px)/1.2 Arial, "DM Sans", system-ui, sans-serif
 }
 
 .developer-card a {
     display: block;
     overflow-wrap: anywhere;
-    color: var(--muted);
+    color: var(--green);
     font-size: 14px;
     text-decoration: none
 }
 
 .developer-card a:hover {
-    color: var(--cream);
+    color: var(--green);
     text-decoration: underline
 }
 
@@ -162,7 +164,7 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    color: var(--light-gold);
+    color: var(--green);
     font-weight: 600
 }
 
@@ -172,7 +174,7 @@
 
 .project-facts dd {
     margin: 8px 0 0 32px;
-    color: var(--muted);
+    color: var(--green);
     line-height: 1.5
 }
 
@@ -193,7 +195,7 @@
     }
 }
 
-@media(max-width:560px) {
+@media(max-width:1120px) {
     .about-heading {
         align-items: flex-start;
         flex-direction: column

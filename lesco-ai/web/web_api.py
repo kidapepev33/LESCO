@@ -11,6 +11,7 @@ from flask import Flask, Response, jsonify, make_response, request, send_file, s
 
 
 WEB_DIR = Path(__file__).resolve().parent
+PWA_DIR = WEB_DIR / "pwa"
 PROJECT_ROOT = WEB_DIR.parent
 DEFAULT_RESULT_PATH = PROJECT_ROOT / "godot_bridge" / "output.txt"
 DEFAULT_FRAME_PATH = PROJECT_ROOT / "godot_bridge" / "frame.jpg"
@@ -93,6 +94,32 @@ def create_app(
     @app.get("/")
     def index():
         return send_from_directory(WEB_DIR, "index.html")
+
+    @app.get("/health")
+    def health():
+        """Identifica esta instancia para el lanzador local de Prisma."""
+        response = jsonify({"service": "prisma", "status": "ok"})
+        response.headers["Cache-Control"] = "no-store"
+        return response
+
+    @app.get("/manifest.webmanifest")
+    def pwa_manifest():
+        response = make_response(send_from_directory(PWA_DIR, "manifest.webmanifest"))
+        response.headers["Cache-Control"] = "no-cache"
+        return response
+
+    @app.get("/sw.js")
+    def service_worker():
+        response = make_response(send_from_directory(PWA_DIR, "sw.js"))
+        response.headers["Cache-Control"] = "no-cache, must-revalidate"
+        response.headers["Service-Worker-Allowed"] = "/"
+        return response
+
+    @app.get("/pwa/<path:filename>")
+    def pwa_assets(filename: str):
+        response = make_response(send_from_directory(PWA_DIR, filename))
+        response.headers["Cache-Control"] = "no-cache"
+        return response
 
     page_files = {
         "lesco-a-texto": "lesco-a-texto.html",

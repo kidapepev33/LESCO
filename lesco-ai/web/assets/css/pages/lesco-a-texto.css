@@ -9,6 +9,12 @@
     padding: clamp(15px, 3vw, 20px)
 }
 
+.camera-card,
+.response-column {
+    background: var(--panel);
+    color: var(--green)
+}
+
 .panel-heading {
     display: flex;
     gap: 14px;
@@ -18,17 +24,17 @@
 
 .panel-heading>span {
     color: var(--gold);
-    font: 500 30px/1 "Playfair Display", serif
+    font: 600 24px/1 Arial, "DM Sans", system-ui, sans-serif
 }
 
 .panel-heading h2 {
     margin: 0 0 4px;
-    font: 500 clamp(24px, 2.3vw, 34px)/1 "Playfair Display", serif
+    font: 500 clamp(22px, 2.1vw, 30px)/1 Arial, "DM Sans", system-ui, sans-serif
 }
 
 .panel-heading p {
     margin: 0;
-    color: var(--muted);
+    color: var(--green);
     font-size: 13px
 }
 
@@ -38,9 +44,9 @@
     display: grid;
     place-items: center;
     overflow: hidden;
-    border: 1px solid var(--line);
+    border: 2px solid var(--line);
     border-radius: 16px;
-    background: #020d0a
+    background: var(--green)
 }
 
 .camera-frame>img {
@@ -56,7 +62,7 @@
 
 .camera-empty {
     padding: 24px;
-    color: var(--muted);
+    color: var(--cream);
     text-align: center
 }
 
@@ -66,7 +72,7 @@
     left: 14px;
     padding: 7px 11px;
     border-radius: 99px;
-    background: #061b16df;
+    background: var(--green);
     font-size: 12px;
     font-weight: 700;
     text-transform: uppercase
@@ -84,9 +90,13 @@
 
 .camera-note {
     margin: 15px 0 0;
-    color: var(--muted);
+    color: var(--green);
     font-size: 13px;
     line-height: 1.5
+}
+
+.camera-note code {
+    color: var(--green)
 }
 
 .response-column {
@@ -100,17 +110,17 @@
     flex: 1;
     flex-direction: column;
     padding: clamp(24px, 4vw, 42px);
-    border: 1px solid var(--line);
-    border-radius: 22px;
-    background: #09231cb8;
-    box-shadow: 0 22px 70px #0003
+    border: 2px solid var(--line);
+    border-radius: 16px;
+    background: var(--panel);
+    box-shadow: none
 }
 
 .card-topline {
     display: flex;
     justify-content: space-between;
     gap: 16px;
-    color: var(--muted);
+    color: var(--green);
     font-size: 14px;
     text-transform: uppercase;
     letter-spacing: .08em
@@ -144,13 +154,13 @@
 
 #sign {
     overflow-wrap: anywhere;
-    color: var(--light-gold);
-    font: clamp(40px, 7vw, 50px)/1.05  "Playfair Display", Georgia, serif
+    color: var(--green);
+    font: clamp(40px, 7vw, 50px)/1.05 Arial, "DM Sans", system-ui, sans-serif
 }
 
 #confidence {
     margin: 0;
-    color: var(--muted)
+    color: var(--green)
 }
 
 @media(max-width:1120px) {

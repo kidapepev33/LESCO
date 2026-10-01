@@ -1,0 +1,41 @@
+.pwa-controls {
+    position: fixed;
+    right: 14px;
+    bottom: 12px;
+    z-index: 40;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font: 12px Arial, sans-serif
+}
+
+.pwa-refresh {
+    padding: 7px 10px;
+    border: 1px solid #FFFFFF;
+    border-radius: 999px;
+    background: #05281De6;
+    color: #FFFFFF;
+    cursor: pointer
+}
+
+.pwa-refresh:disabled {
+    cursor: wait;
+    opacity: .65
+}
+
+.pwa-status {
+    max-width: 190px;
+    color: #05281D;
+    text-shadow: 0 1px #FFFFFF
+}
+
+@media(max-width:720px) {
+    .pwa-controls {
+        right: 8px;
+        bottom: 8px
+    }
+
+    .pwa-status {
+        display: none
+    }
+}

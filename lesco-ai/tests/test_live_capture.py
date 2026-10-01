@@ -65,7 +65,7 @@ class FramePublicationTests(unittest.TestCase):
         self.assertIs(rendered, frame)
         np.testing.assert_array_equal(rendered, original)
 
-    def test_show_frame_displays_and_atomically_publishes_same_final_frame(self) -> None:
+    def test_show_frame_atomically_publishes_processed_frame(self) -> None:
         frame = np.arange(24, dtype=np.uint8).reshape(2, 4, 3)
         written_frames: list[np.ndarray] = []
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -78,13 +78,9 @@ class FramePublicationTests(unittest.TestCase):
                 Path(path).write_bytes(b"encoded-final-frame")
                 return True
 
-            with (
-                patch("src.recognition.session.cv2.imshow") as imshow,
-                patch("src.recognition.session.cv2.imwrite", side_effect=fake_imwrite) as imwrite,
-            ):
+            with patch("src.recognition.session.cv2.imwrite", side_effect=fake_imwrite) as imwrite:
                 session.show_frame(frame)
 
-            self.assertIs(imshow.call_args.args[1], frame)
             np.testing.assert_array_equal(written_frames[0], frame)
             self.assertEqual(Path(imwrite.call_args.args[0]).name, "frame.next.jpg")
             self.assertEqual(output_path.read_bytes(), b"encoded-final-frame")
@@ -121,7 +117,6 @@ class LiveSessionTests(unittest.TestCase):
                     debug_response_path=root / "debug_response.txt",
                     tracker=object(),
                     fps=30.0,
-                    project_root=root,
                 )
 
         recognizer_class.assert_called_once_with()
@@ -156,10 +151,7 @@ class LiveSessionTests(unittest.TestCase):
                 finalized_end_frame=4,
             )
 
-            with (
-                patch("src.recognition.session.cv2.waitKey"),
-                patch("src.recognition.session.write_debug_response"),
-            ):
+            with patch("src.recognition.session.write_debug_response"):
                 session._classify_finalized_segment(np.zeros((2, 2, 3), dtype=np.uint8), step)
 
             output = session.output_text_path.read_text(encoding="utf-8")
@@ -199,10 +191,7 @@ class LiveSessionTests(unittest.TestCase):
             session.show_frame = lambda frame: None
             step = RecorderStep(CaptureState.WAITING, finalized_clip=np.zeros((3, 2, 21, 3)))
 
-            with (
-                patch("src.recognition.session.cv2.waitKey"),
-                patch("src.recognition.session.write_debug_response"),
-            ):
+            with patch("src.recognition.session.write_debug_response"):
                 session._classify_finalized_segment(np.zeros((2, 2, 3), dtype=np.uint8), step)
                 accepted_output = session.output_text_path.read_text(encoding="utf-8")
                 session._classify_finalized_segment(np.zeros((2, 2, 3), dtype=np.uint8), step)
@@ -278,10 +267,7 @@ class LiveSessionTests(unittest.TestCase):
             step = RecorderStep(CaptureState.WAITING, finalized_clip=np.zeros((3, 2, 21, 3)))
             observed = []
 
-            with (
-                patch("src.recognition.session.cv2.waitKey"),
-                patch("src.recognition.session.write_debug_response"),
-            ):
+            with patch("src.recognition.session.write_debug_response"):
                 for _ in results:
                     session._classify_finalized_segment(np.zeros((2, 2, 3), dtype=np.uint8), step)
                     observed.append(session.output_text_path.read_text(encoding="utf-8"))

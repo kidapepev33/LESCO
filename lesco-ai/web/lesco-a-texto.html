@@ -4,38 +4,43 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
-    <meta name="theme-color" content="#061b16">
+    <meta name="theme-color" content="#05281D">
     <meta name="description" content="Reconocimiento de LESCO a texto con Prisma.">
     <title>Prisma | LESCO a Texto</title>
     <link rel="stylesheet" href="/assets/css/main.css">
+    <link rel="stylesheet" href="/pwa/pwa.css">
+    <link rel="manifest" href="/manifest.webmanifest">
+    <link rel="icon" href="/pwa/icons/icon-192.png" sizes="192x192" type="image/png">
+    <link rel="apple-touch-icon" href="/pwa/icons/icon-192.png">
 </head>
 
 <body>
     <div class="app-shell">
         <aside class="sidebar" id="sidebar" aria-label="Navegación principal"><a class="brand" href="/"><img
-                    src="/assets/images/image-removebg-preview.png" alt="Logo de Prisma"></a>
-            <nav class="main-nav"><a class="nav-link" href="/"><b>⌂</b><span>Inicio</span></a><a
-                    class="nav-link is-active" href="/lesco-a-texto" aria-current="page"><b>☝</b><span>LESCO a
-                        Texto</span></a><a class="nav-link" href="/texto-a-lesco"><b>☝</b><span>Texto a
+                    src="/assets/images/ISOTIPOPRISMA.png" alt="Logo de Prisma"></a>
+            <nav class="main-nav"><a class="nav-link" href="/"><b>◆</b><span>Inicio</span></a><a
+                    class="nav-link is-active" href="/lesco-a-texto" aria-current="page"><b>→</b><span>LESCO a
+                        Texto</span></a><a class="nav-link" href="/texto-a-lesco"><b>←</b><span>Texto a
                         LESCO</span></a><a class="nav-link" href="/nosotros"><b>✦</b><span>Nosotros</span></a><a
                     class="nav-link" href="/ayuda"><b>?</b><span>Ayuda</span></a></nav>
-            <p class="sidebar-note">Comunicación accesible,<br>gesto a gesto.</p>
+
         </aside>
         <header class="mobile-header"><a class="mobile-brand" href="/">PRISMA</a><button class="menu-button"
                 type="button" aria-expanded="false" aria-controls="sidebar"
                 aria-label="Abrir menú"><i></i><i></i><i></i></button></header>
         <main class="content feature-page lesco-page">
-            <header class="section-heading">
-                <p class="eyebrow">Reconocimiento en vivo</p>
-                <h1>LESCO a Texto</h1>
-                <p>La misma captura del reconocedor y su resultado actual, reunidos en una sola vista.</p>
+            <header class="section-heading about-heading">
+                <div>
+                    <p class="eyebrow">Reconocimiento en vivo</p>
+                    <h1>LESCO a Texto</h1>
+                </div>
+                <img src="/assets/images/IMAGOTIPO.png" alt="Prisma">
             </header>
             <div class="interpreter-grid">
                 <section class="camera-card" aria-labelledby="camera-title">
                     <div class="panel-heading"><span>01</span>
                         <div>
                             <h2 id="camera-title">Intérprete LESCO</h2>
-                            <p>Captura procesada por Python</p>
                         </div>
                     </div>
                     <div class="camera-frame"><img id="camera-feed" src="/stream"
@@ -44,8 +49,6 @@
                             <p>Esperando el primer frame del reconocedor…</p>
                         </div>
                     </div>
-                    <p class="camera-note">Esta vista reutiliza el frame que ya publica <code>predict_live.py</code>. No
-                        abre otra cámara.</p>
                 </section>
                 <section class="response-column" aria-labelledby="response-title">
                     <div class="panel-heading"><span>02</span>
@@ -67,6 +70,7 @@
     </div>
     <div class="menu-backdrop"></div>
     <script src="/assets/js/app.js" defer></script>
+    <script src="/pwa/register.js" defer></script>
 </body>
 
 </html>

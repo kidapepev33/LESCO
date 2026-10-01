@@ -1,0 +1,32 @@
+=== RECURSOS DE PRISMA ===
+Estado del monitor: INTERRUMPIDO POR EL USUARIO
+PID de Prisma: 27968
+Tiempo monitoreado: 44.6 s
+Muestras: 44
+
+CPU: 100% equivale a un núcleo completamente ocupado.
+RAM: suma de RSS; la memoria compartida puede contarse más de una vez.
+
+[Prisma]
+CPU actual/promedio/máximo: 0.0% / 0.0% / 1.0%
+RAM actual/promedio/máximo: 15.9 MiB / 15.6 MiB / 15.9 MiB
+
+[Web]
+CPU actual/promedio/máximo: 6.0% / 6.8% / 8.0%
+RAM actual/promedio/máximo: 38.9 MiB / 38.4 MiB / 38.9 MiB
+
+[Puente de videos]
+CPU actual/promedio/máximo: 1.0% / 0.3% / 2.0%
+RAM actual/promedio/máximo: 56.2 MiB / 55.5 MiB / 56.2 MiB
+
+[Reconocedor]
+CPU actual/promedio/máximo: 79.0% / 92.8% / 127.0%
+RAM actual/promedio/máximo: 892.2 MiB / 880.5 MiB / 892.2 MiB
+
+[Otros descendientes]
+CPU actual/promedio/máximo: 0.0% / 0.0% / 0.0%
+RAM actual/promedio/máximo: 0.0 MiB / 0.0 MiB / 0.0 MiB
+
+[Árbol completo]
+CPU actual/promedio/máximo: 86.0% / 100.0% / 134.0%
+RAM actual/promedio/máximo: 1003.2 MiB / 990.0 MiB / 1003.2 MiB

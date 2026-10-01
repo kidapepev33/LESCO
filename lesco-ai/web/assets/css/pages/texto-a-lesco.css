@@ -7,10 +7,11 @@
 .translation-input,
 .translation-video {
     padding: clamp(15px, 3vw, 20px);
-    border: 1px solid var(--line);
-    border-radius: 22px;
-    background: #09231cb8;
-    box-shadow: 0 22px 70px #0003
+    border: 2px solid var(--line);
+    border-radius: 18px;
+    background: var(--panel);
+    color: var(--green);
+    box-shadow: none
 }
 
 .translation-input,
@@ -24,15 +25,13 @@
     min-height: 360px;
     flex: 1;
     padding: clamp(24px, 4vw, 42px);
-    border: 1px solid var(--line);
-    border-radius: 22px;
-    background: #09231cb8;
-    box-shadow: 0 22px 70px #0003
+    background: var(--panel);
+    box-shadow: none
 }
 
 #translation-form label {
     margin-bottom: 12px;
-    color: var(--light-gold);
+    color: var(--gold);
     font-weight: 600
 }
 
@@ -42,17 +41,17 @@
     flex: 1;
     resize: vertical;
     padding: 18px;
-    border: 1px solid var(--line);
+    border: 2px solid var(--line);
     border-radius: 16px;
     outline: none;
-    background: #020d0a;
-    color: var(--cream);
+    background: var(--panel);
+    color: var(--green);
     line-height: 1.6
 }
 
 #translation-text:focus {
-    border-color: var(--gold);
-    box-shadow: 0 0 0 3px #e8af3c1c
+    border-color: var(--line);
+    box-shadow: 0 0 0 3px #0003
 }
 
 .translation-actions {
@@ -80,7 +79,7 @@
 
 #translation-status {
     margin: 0;
-    color: var(--muted);
+    color: var(--green);
     font-size: 14px
 }
 
@@ -90,9 +89,9 @@
     display: grid;
     place-items: center;
     overflow: hidden;
-    border: 1px solid var(--line);
+    border: 2px solid var(--line);
     border-radius: 16px;
-    background: #020d0a
+    background: var(--green)
 }
 
 .sign-video-frame>img {
@@ -105,7 +104,7 @@
 .sign-video-empty {
     position: absolute;
     padding: 24px;
-    color: var(--muted);
+    color: var(--green);
     text-align: center
 }
 
@@ -115,7 +114,7 @@
 
 .video-note {
     margin: 15px 0 0;
-    color: var(--muted);
+    color: var(--cream);
     font-size: 13px;
     line-height: 1.5
 }

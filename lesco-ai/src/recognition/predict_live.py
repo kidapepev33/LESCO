@@ -215,8 +215,7 @@ def run_camera(
     output_frame_path: Path,
     debug_response_path: Path,
 ) -> None:
-    """Run the camera loop until the user quits."""
-    project_root = Path(__file__).resolve().parents[2]
+    """Run the camera loop while frames remain available."""
     tracker = make_hand_tracker()
     cap = None
     capture = None
@@ -230,7 +229,6 @@ def run_camera(
             debug_response_path=debug_response_path,
             tracker=tracker,
             fps=camera_fps(cap),
-            project_root=project_root,
             result_printer=print_result,
         )
         capture = LatestFrameCapture(cap)
@@ -245,17 +243,12 @@ def run_camera(
                 continue
             frame = session.process_frame(frame)
             session.show_frame(frame)
-
-            key = cv2.waitKey(1) & 0xFF
-            if not session.handle_key(key):
-                break
     finally:
         if capture is not None:
             capture.stop()
         tracker.close()
         if cap is not None:
             cap.release()
-        cv2.destroyAllWindows()
 
 
 def main() -> None:

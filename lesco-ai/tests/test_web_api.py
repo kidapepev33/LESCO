@@ -69,6 +69,34 @@ class WebApiTests(unittest.TestCase):
             stylesheet.close()
             script.close()
 
+    def test_pwa_manifest_worker_and_health_are_served(self) -> None:
+        client = create_app().test_client()
+        health = client.get("/health")
+        manifest = client.get("/manifest.webmanifest")
+        worker = client.get("/sw.js")
+        try:
+            self.assertEqual(health.get_json(), {"service": "prisma", "status": "ok"})
+            self.assertIn("no-store", health.headers["Cache-Control"])
+            self.assertEqual(manifest.status_code, 200)
+            self.assertIn(b'"display": "standalone"', manifest.data)
+            self.assertEqual(worker.status_code, 200)
+            self.assertEqual(worker.headers["Service-Worker-Allowed"], "/")
+            self.assertIn(b"LIVE_PATHS", worker.data)
+        finally:
+            health.close()
+            manifest.close()
+            worker.close()
+
+    def test_all_pages_register_the_shared_pwa(self) -> None:
+        client = create_app().test_client()
+        for route in ("/", "/lesco-a-texto", "/texto-a-lesco", "/nosotros", "/ayuda"):
+            response = client.get(route)
+            try:
+                self.assertIn(b'href="/manifest.webmanifest"', response.data, route)
+                self.assertIn(b'src="/pwa/register.js"', response.data, route)
+            finally:
+                response.close()
+
     def test_all_independent_pages_are_served(self) -> None:
         client = create_app().test_client()
         for route in ("/", "/lesco-a-texto", "/texto-a-lesco", "/nosotros", "/ayuda"):
@@ -120,7 +148,7 @@ class WebApiTests(unittest.TestCase):
             self.assertIn("Sobre nosotros".encode(), response.data)
             self.assertIn("Desarrolladores".encode(), response.data)
             self.assertIn("Información de la aplicación".encode(), response.data)
-            self.assertIn(b'/assets/images/hand.png', response.data)
+            self.assertIn(b'/assets/images/IMAGOTIPO.png', response.data)
             self.assertIn(b'href="/nosotros" aria-current="page"', response.data)
             self.assertNotIn(b"1.0 BETA", response.data)
             self.assertNotIn(b"21 MAYO 2026", response.data)
